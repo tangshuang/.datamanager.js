@@ -6,7 +6,7 @@ export default class ComponentA {
     let datasources = [
       {
         id: 'studentsB',
-        url: 'http://localhost:3999/students',
+        url: '/students',
         type: 'GET',
       },
     ]

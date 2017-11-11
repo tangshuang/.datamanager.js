@@ -6,7 +6,7 @@ export default class ComponentA {
     this.data = new DataManager([
       {
         id: 'studentsA',
-        url: 'http://localhost:3999/students',
+        url: '/students',
         type: 'GET',
       },
     ])

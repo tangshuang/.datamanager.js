@@ -66,10 +66,13 @@ To new a datamanager instance.
 
 ```
 {
+  host: '', // string, i.e. https://yourdomain.com/api, which will be connected with your given url in component
   expires: 10*1000, // 10ms cached
   debug: false, // console.log some internal information, now no use
 }
 ```
+
+Read more from following `setConfig` api.
 
 ### register(datasource)
 
@@ -184,6 +187,35 @@ Array of functions. If you pass only one function, it is ok.
 ### autofree(funcs)
 
 Freed watchings which created by `autorun`. You must to do this before you destroy your component if you have called `autorun`, or you will face memory problem.
+
+## API
+
+### setConfig(cfgs)
+
+To set global config. Do like this:
+
+```
+import DataManager, { setConfig } from './datamanger'
+
+setConfig({ host: 'http://mywebsite.com/api' })
+
+...
+```
+
+Why we need to set global config? Because some time we want our components in one application have same basic config.
+Current default configs is:
+
+```
+{
+  host: '',
+  expires: 10*1000, 
+  debug: false,
+}
+```
+
+It means all components will use this options when they initialize.
+
+Notice: if you use `setConfig` after a initailiztion, you will find the previous instances have no change, and the behind instances will use new config.
 
 ## Shared datasource
 

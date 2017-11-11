@@ -149,6 +149,8 @@ Object.defineProperty(exports, "__esModule", {
 
 var _createClass = function () { function defineProperties(target, props) { for (var i = 0; i < props.length; i++) { var descriptor = props[i]; descriptor.enumerable = descriptor.enumerable || false; descriptor.configurable = true; if ("value" in descriptor) descriptor.writable = true; Object.defineProperty(target, descriptor.key, descriptor); } } return function (Constructor, protoProps, staticProps) { if (protoProps) defineProperties(Constructor.prototype, protoProps); if (staticProps) defineProperties(Constructor, staticProps); return Constructor; }; }();
 
+exports.setConfig = setConfig;
+
 var _hashString = __webpack_require__(5);
 
 var _hashString2 = _interopRequireDefault(_hashString);
@@ -171,6 +173,11 @@ function _classCallCheck(instance, Constructor) { if (!(instance instanceof Cons
 
 var pool = {};
 var queue = {};
+var configs = {
+  host: '',
+  expires: 10 * 1000,
+  debug: false
+};
 
 function addDataSource(source) {
   var hash = source.hash,
@@ -250,7 +257,7 @@ var DataManager = function () {
 
     this.datasources = {};
     this.id = 'datamanager.' + Date.now() + '.' + parseInt(Math.random() * 10000);
-    this.settings = (0, _lodash4.default)({ expires: 10 * 1000, debug: false }, settings);
+    this.settings = (0, _lodash4.default)({}, configs, settings);
     datasources.forEach(function (datasource) {
       return _this.register(datasource);
     });
@@ -428,6 +435,7 @@ var DataManager = function () {
         this._addDep();
       }
 
+      var host = this.settings.host;
       var url = datasource.url,
           type = datasource.type,
           transformers = datasource.transformers;
@@ -439,7 +447,7 @@ var DataManager = function () {
         if (queue[requestId]) {
           return queue[requestId];
         }
-        var requestURL = (0, _interpolate2.default)(url, params);
+        var requestURL = (host ? host : '') + (0, _interpolate2.default)(url, params);
         options.method = options.method || type.toUpperCase();
         var requesting = fetch(requestURL, options).then(function (res) {
           queue[requestId] = null;
@@ -498,6 +506,11 @@ var DataManager = function () {
 }();
 
 exports.default = DataManager;
+function setConfig() {
+  var cfgs = arguments.length > 0 && arguments[0] !== undefined ? arguments[0] : {};
+
+  (0, _lodash4.default)(configs, cfgs);
+}
 
 /***/ }),
 /* 3 */
@@ -527,7 +540,7 @@ var ComponentA = function () {
     this.container = container;
     this.data = new _datamanager2.default([{
       id: 'studentsA',
-      url: 'http://localhost:3999/students',
+      url: '/students',
       type: 'GET'
     }]);
     this.data.autorun(this.render.bind(this));
@@ -582,7 +595,7 @@ var ComponentA = function () {
     this.container = container;
     var datasources = [{
       id: 'studentsB',
-      url: 'http://localhost:3999/students',
+      url: '/students',
       type: 'GET'
     }];
     this.data = new _datamanager2.default(datasources, { debug: true, expires: 1000 });

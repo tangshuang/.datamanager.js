@@ -5,6 +5,11 @@ import interpolate from 'interpolate'
 
 const pool = {}
 const queue = {}
+const configs = {
+  host: '',
+  expires: 10*1000, 
+  debug: false,
+}
 
 function addDataSource(source) {
   let { hash, url, type } = source
@@ -71,7 +76,7 @@ export default class DataManager {
   constructor(datasources = [], settings = {}) {
     this.datasources = {}
     this.id = 'datamanager.' + Date.now() + '.' + parseInt(Math.random() * 10000)
-    this.settings = merge({ expires: 10*1000, debug: false }, settings)
+    this.settings = merge({}, configs, settings)
     datasources.forEach(datasource => this.register(datasource))
     this._deps = []
   }
@@ -196,6 +201,7 @@ export default class DataManager {
       this._addDep()
     }
 
+    let { host } = this.settings
     let { url, type, transformers } = datasource
     let requestId = hashstr(type + ':' + url + ':' + JSON.stringify(params) + (type.toUpperCase() === 'POST' && options.body ? ':' + JSON.stringify(options.body) : ''))
     let source = pool[datasource.hash]
@@ -204,7 +210,7 @@ export default class DataManager {
       if (queue[requestId]) {
         return queue[requestId]
       }
-      let requestURL = interpolate(url, params)
+      let requestURL = (host ? host : '') + interpolate(url, params)
       options.method = options.method || type.toUpperCase()
       let requesting = fetch(requestURL, options)
       .then(res => {
@@ -256,4 +262,8 @@ export default class DataManager {
       return undefined
     }
   }
+}
+
+export function setConfig(cfgs = {}) {
+  merge(configs, cfgs)
 }
