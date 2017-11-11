@@ -181,9 +181,9 @@ export default class MyComponent {
 
 Array of functions. If you pass only one function, it is ok.
 
-### autostop(funcs)
+### autofree(funcs)
 
-Stop watchings which created by `autorun`. You must to do this before you destroy your component if you have called `autorun`, or you will face memory problem.
+Freed watchings which created by `autorun`. You must to do this before you destroy your component if you have called `autorun`, or you will face memory problem.
 
 ## Shared datasource
 

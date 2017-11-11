@@ -391,8 +391,8 @@ var DataManager = function () {
       });
     }
   }, {
-    key: 'autostop',
-    value: function autostop(funcs) {
+    key: 'autofree',
+    value: function autofree(funcs) {
       var _this5 = this;
 
       if (!Array.isArray(funcs) && typeof funcs === 'function') {

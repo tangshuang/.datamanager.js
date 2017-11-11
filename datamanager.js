@@ -171,7 +171,7 @@ export default class DataManager {
       this._wrapDep(fun)
     })
   }
-  autostop(funcs) {
+  autofree(funcs) {
     if (!Array.isArray(funcs) && typeof funcs === 'function') {
       funcs = [ funcs ]
     }
