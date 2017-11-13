@@ -5,6 +5,10 @@ import interpolate from 'interpolate'
 
 const pool = {}
 const queue = {}
+const transactionResolves = {}
+const transactionPromises = {}
+const transactionData = {}
+const transactionTimers = {}
 const configs = {
   host: '',
   expires: 10*1000, 
@@ -261,6 +265,53 @@ export default class DataManager {
       queue[requestId] = request()
       return undefined
     }
+  }
+  save(id, params = {}, data, options = {}) {
+    let datasource = this.datasources[id]
+    if (!datasource) {
+      throw new Error('Datasource ' + id + ' is not exists.')
+    }
+
+    let { host } = this.settings
+    let { url, type } = datasource
+    let requestId = hashstr(type + ':' + url + ':' + JSON.stringify(params) + (type.toUpperCase() === 'POST' && options.body ? ':' + JSON.stringify(options.body) : ''))
+
+    let resolves = transactionResolves[requestId] = transactionResolves[requestId] || []
+    let promises = transactionPromises[requestId] = transactionPromises[requestId] || []
+    let d = transactionData[requestId] = transactionData[requestId] || {}
+    let postData = merge(d, data)
+
+    transactionData[requestId] = postData
+    promises.push(new Promise(resolve => resolves.push(resolve)))
+
+    if (transactionTimers[requestId]) {
+      clearTimeout(transactionTimers[requestId])
+    }
+
+    transactionTimers[requestId] = setTimeout(() => {
+      resolves.forEach(resolve => resolve())
+      transactionResolves[requestId] = []
+      transactionPromises[requestId] = []
+      transactionData[requestId] = {}
+    }, 10)
+
+    return new Promise((resolve, reject) => {
+      Promise.all(promises).then(() => {
+        let requestURL = (host ? host : '') + interpolate(url, params)
+        options.method = options.method || type.toUpperCase()
+        options.body = postData
+        let requesting = fetch(requestURL, options)
+        .then(res => {
+          resolve(res)
+        })
+        .catch(e => {
+          reject(e)
+        })
+      })
+      .catch(e => {
+        reject(e)
+      })
+    })
   }
 }
 

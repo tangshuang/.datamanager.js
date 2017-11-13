@@ -142,6 +142,8 @@ Request options, if you want to use 'POST' method, do like this:
 let data = await this.datamanager.get('myid', {}, { method: 'POST', body: { data1: 'xx' } })
 ```
 
+If options.method is set, it will be used to cover datasource.type.
+
 However, your datasource.type given by `register` always cover this value. Read more from web api `fetch`.
 
 *Notice: you do not get the latest data request from server side, you just get latest data from managed cache.*
@@ -187,6 +189,60 @@ Array of functions. If you pass only one function, it is ok.
 ### autofree(funcs)
 
 Freed watchings which created by `autorun`. You must to do this before you destroy your component if you have called `autorun`, or you will face memory problem.
+
+### save(id, params, data, options)
+
+To save data to server side, I provide a save method. You can use it like put/post operation:
+
+```
+this.datamanger.save('myId', { userId: '1233' }, { name: 'lily', age: 10 })
+```
+
+**id**
+
+datasource id.
+
+**params**
+
+Interpolations replacements variables.
+
+**data**
+
+post data.
+
+**options**
+
+`fetch` options.
+
+**@return**
+
+This method will return a promise, so you can use `then` or `catch` to do something when request is done.
+
+`.save` method has some rules:
+
+1> options.body will not work, instead of `data`
+2> options.method come before datasource.type
+3> several save requests will be merged
+
+We use a simple transaction to forbide save request being sent twice/several times in a short time. If more than one saving request happens in *10ms*, they will be merged, post data will be merged, and the final request send merged data to server side. So if one property of post data is same from two saving request, the behind data property will be used, you should be careful about this.
+If you know react's `setState`, you may know more about this transaction.
+
+In fact, a datasource which follow RestFul Api principle, the same `id` of a datasource can be used by `.get` and `.save` methods:
+
+```
+this.datamanager.register({
+  id: 'myrestapi',
+  ...
+})
+...
+let data = this.datamanager.get('myrestapi')
+
+...
+this.datamanager.save('myrestapi', {}, { ...myPostData }, { method: 'POST' }) // here method:'POST' is important in this case
+.then(res => {
+  // you can use `res` to do some logic
+})
+```
 
 ## API
 
