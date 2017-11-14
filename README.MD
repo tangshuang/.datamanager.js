@@ -1,6 +1,6 @@
 # DataManger.js
 
-A data manager package which can share data among different components/application.
+A frontend data sources management resolution among different components/application.
 
 ## Install
 
@@ -29,7 +29,6 @@ export default class MyComponent {
     // or you can register several times
     // step 3: subscribe change callbacks
     this.datamanager.subscribe('myid', params => { 
-      // data is a deep copy from your subscribed data,
       // params is what you passed when you call .get(id, params)
       // you can use params to determine whether to go on,
       // for example:
@@ -91,12 +90,17 @@ Register a datasource in datamanager, notice, data source is shared with other c
 ```
 {
   id: '', // string, identifation of this datasource, can be only called by current instance
-  url: '', // string, absolute url to request data, you can use interpolations in it, i.e. 'https://xxx/{user_name}/{id}', and when you cal `.get` method, you can pass params in the second paramater.
+  url: '', // string, url to request data, 
+    // you can use interpolations in it, i.e. 'https://xxx/{user_name}/{id}', 
+    // and when you cal `.get` method, you can pass params in the second paramater,
+    // if you pass relative url, it will be connected with options.host
   type: '', // string, 'GET' or 'POST', default request method to use. default is 'GET'
-  expires: 1000, // number, ms to cache your data, if set to be 0, it means you want to request data every time
+  body: {}, // if your `type` is 'POST', you may want to bring with some post data when you request, set these default post data here
   transformers: [() => {}], // [function], transform your data before getting data from data manager, you should pass a bound function or an arrow function if you use `this` in it.
 }
 ```
+
+When you `.get` or `.save` data, this datasource info will be used as basic information. However `options` which is passed to .get and .save will be merged into this information, and the final request information is a merged object.
 
 ### subscribe(id, callback, priority)
 
@@ -134,10 +138,10 @@ If `expires` is set, cache data will be used if not expired, if the cache data i
 
 **params**
 
-To replace interpolations in `url` option. For example, your data source url is 'https://xxx/{userId}/{status}', you can do like this:
+To replace interpolations in `url` option. For example, your data source url is 'https://xxx/{user}/{no}', you can do like this:
 
 ```
-let data = this.datamanager.get('myid', { userId: 'lily', status: '1' })
+let data = this.datamanager.get('myid', { user: 'lily', no: '1' })
 ```
 
 **options**
@@ -204,6 +208,8 @@ To save data to server side, I provide a save method. You can use it like put/po
 this.datamanger.save('myId', { userId: '1233' }, { name: 'lily', age: 10 })
 ```
 
+Notice: save method will not update the local cached data, local cached data can only be updated by `.get` method after request from server side. So when you use `.save`, you should  always `.get` again in `.then`.
+
 **id**
 
 datasource id.
@@ -226,9 +232,9 @@ This method will return a promise, so you can use `then` or `catch` to do someth
 
 `.save` method has some rules:
 
-1> options.body will not work, instead of `data`
-2> options.method come before datasource.type
-3> several save requests will be merged
+1. options.body will not work, instead of `data`
+2. options.method come before datasource.type
+3. several save requests will be merged
 
 We use a simple transaction to forbide save request being sent twice/several times in a short time. If more than one saving request happens in *10ms*, they will be merged, post data will be merged, and the final request send merged data to server side. So if one property of post data is same from two saving request, the behind data property will be used, you should be careful about this.
 If you know react's `setState`, you may know more about this transaction.
@@ -281,7 +287,7 @@ Notice: if you use `config` after a initailiztion, you will find the previous in
 
 ## Shared datasource
 
-Only `type` `url` and data is shared amoung different components, when using register, you should give `type` `url` options, use these two options, we can identify a datasource. If two component register datasources with same `type` and `url`, we treat they are the same datasource, their data are shared, and when one component get data which fire requesting, the other one will be notified after data back.
+When using register, you should give `type` `url` options, `body` may be given. We can identify a datasource with type+url+body. If two component register datasources with same type+url+body, we treat they are the same datasource, their data are shared, and when one component get data which fire requesting, the other one will be notified after data back.
 
 In componentA:
 
@@ -308,13 +314,16 @@ this.datamanager.register({
 this.datamanager.get('idb')
 ```
 
-Although the id of componentA's datamanager is 'ida', it will be notified becuase of same url+type.
+Although the id of componentA's datamanager is 'ida', it will be notified becuase of same url+type+body.
 
-Transformers and subscribe callbacks will not be confused.
+Transformers and subscribe callbacks will not be confused, each components has its own transformers and callbacks.
 
 **Why do we need shared datasource?**
 
-Different component is possible to call same data source, one ajax request has no need to be call twice in a short time. Shared datasource help us to keep only one block of data if the true data source is same.
+Shared datasource help us to keep only one block of data amoung same datasources.
+
+Different component is possible to call same data source more than once in a short time, 
+datamanager will help you to merge these requests, only once request happens.
 
 ## Development
 

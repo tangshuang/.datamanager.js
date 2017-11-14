@@ -1,7 +1,7 @@
 {
   "name": "datamanager.js",
-  "version": "0.0.1",
-  "description": "A data manager package which can share data among different components/application.",
+  "version": "0.0.2",
+  "description": "A frontend data sources management resolution among different components/application.",
   "main": "dist/datamanager.js",
   "directories": {
     "example": "examples"

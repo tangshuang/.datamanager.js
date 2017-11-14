@@ -32,7 +32,7 @@ function addDataSource(source) {
   }
 }
 
-function addDataItem(source, requestId, data) {
+function setDataItem(source, requestId, data) {
   let { store } = source
   let item = store[requestId] = store[requestId] || {}
   let snapshots = item.snapshots = item.snapshots || []
@@ -94,14 +94,15 @@ export default class DataManager {
     }
   }
   register(datasource) {
-    let { id, url, type, transformers } = datasource
+    let { id, url, type, body, transformers } = datasource
     let { host } = this.settings
     let requestURL = url.indexOf('http://') > -1 || url.indexOf('https://') > -1 ? url : host + url
-    let hash = hashstr(type + ':' + requestURL)
+    let hash = hashstr(type + ':' + requestURL + (body ? ':' + JSON.stringify(body) : ''))
     let source = {
       hash,
-      type,
       url: requestURL,
+      type,
+      body,
     }
 
     addDataSource(source)
@@ -211,23 +212,24 @@ export default class DataManager {
       this._addDep()
     }
 
-    let { url, type, transformers } = datasource
-    let requestId = hashstr(type + ':' + url + ':' + JSON.stringify(params) + (type.toUpperCase() === 'POST' && options.body ? ':' + JSON.stringify(options.body) : ''))
+    let { url, type, body, transformers } = datasource
+    let requestURL = interpolate(url, params)
+    let requestId = hashstr(type + ':' + requestURL + (type.toUpperCase() === 'POST' && options.body ? ':' + JSON.stringify(options.body) : ''))
     let source = pool[datasource.hash]
     
     let request = () => {
       if (queue[requestId]) {
         return queue[requestId]
       }
-      let requestURL = interpolate(url, params)
       options.method = options.method || type.toUpperCase()
+      options.body = options.body ? (body ? merge({}, body, options.body) : options.body) : (body ? body : undefined)
       let requesting = fetch(requestURL, options)
       .then(res => {
         queue[requestId] = null
         return res.json()
       }) // only json supported
       .then(data => {
-        addDataItem(source, requestId, data)
+        setDataItem(source, requestId, data)
         let callbacks = source.callbacks
         trigger(callbacks, params)
       })
@@ -277,7 +279,7 @@ export default class DataManager {
       throw new Error('Datasource ' + id + ' is not exists.')
     }
 
-    let { url, type } = datasource
+    let { url, type, body } = datasource
     let requestId = hashstr(type + ':' + url + ':' + JSON.stringify(params) + (type.toUpperCase() === 'POST' && options.body ? ':' + JSON.stringify(options.body) : ''))
 
     let resolves = transactionResolves[requestId] = transactionResolves[requestId] || []
@@ -303,7 +305,7 @@ export default class DataManager {
       Promise.all(promises).then(() => {
         let requestURL = interpolate(url, params)
         options.method = options.method || type.toUpperCase()
-        options.body = postData
+        options.body = body ? merge({}, body, postData) : postData
         let requesting = fetch(requestURL, options)
         .then(res => {
           resolve(res)
