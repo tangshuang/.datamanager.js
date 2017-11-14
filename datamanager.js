@@ -3,13 +3,18 @@ import deepclone from 'lodash.clonedeep'
 import merge from 'lodash.merge'
 import interpolate from 'interpolate'
 
+// for shared data source
 const pool = {}
+// for .get requests
 const queue = {}
+// for .save requests
 const transactionResolves = {}
 const transactionPromises = {}
 const transactionData = {}
 const transactionTimers = {}
+const middlewares = []
 const configs = {
+  requester: fetch,
   host: '',
   expires: 10*1000, 
   debug: false,
@@ -17,6 +22,10 @@ const configs = {
 
 export function config(cfgs = {}) {
   merge(configs, cfgs)
+}
+
+export function middleware(mw) {
+  middlewares.push(mw)
 }
 
 function addDataSource(source) {
@@ -84,7 +93,13 @@ export default class DataManager {
   constructor(datasources = [], settings = {}) {
     this.datasources = {}
     this.id = 'datamanager.' + Date.now() + '.' + parseInt(Math.random() * 10000)
+
+    let mws = settings.middlewares
+    delete settings.middlewares
+    this.middlewares = mws ? middlewares.concat(mws) : middlewares
+
     this.settings = merge({}, configs, settings)
+
     datasources.forEach(datasource => this.register(datasource))
     this._deps = []
   }
@@ -223,7 +238,7 @@ export default class DataManager {
       }
       options.method = options.method || type.toUpperCase()
       options.body = options.body ? (body ? merge({}, body, options.body) : options.body) : (body ? body : undefined)
-      let requesting = fetch(requestURL, options)
+      let requesting = this.settings.requester(requestURL, options)
       .then(res => {
         queue[requestId] = null
         return res.json()
@@ -306,7 +321,7 @@ export default class DataManager {
         let requestURL = interpolate(url, params)
         options.method = options.method || type.toUpperCase()
         options.body = body ? merge({}, body, postData) : postData
-        let requesting = fetch(requestURL, options)
+        let requesting = this.settings.requester(requestURL, options)
         .then(res => {
           resolve(res)
         })

@@ -71,6 +71,7 @@ To new a datamanager instance.
 
 ```
 {
+  requester: fetch, // function(url, options), use which library to send request, you can use axios to create a function, default using `fetch`
   host: '', // string, i.e. https://yourdomain.com/api, which will be connected with your given url in component
   expires: 10*1000, // 10ms cached
   debug: false, // console.log some internal information, now no use
@@ -275,6 +276,7 @@ Current default configs is:
 
 ```
 {
+  requester: fetch,
   host: '',
   expires: 10*1000, 
   debug: false,
