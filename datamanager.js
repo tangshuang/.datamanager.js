@@ -237,8 +237,8 @@ export default class DataManager {
         return queue[requestId]
       }
       options.method = options.method || type.toUpperCase()
-      options.body = options.body ? (body ? merge({}, body, options.body) : options.body) : (body ? body : undefined)
-      let requesting = this.settings.requester(requestURL, options)
+      options.body = options.body ? JSON.stringify(body ? merge({}, body, options.body) : options.body) : (body ? JSON.stringify(body) : undefined)
+      let requesting = this._request(requestURL, options)
       .then(res => {
         queue[requestId] = null
         return res.json()
@@ -320,8 +320,8 @@ export default class DataManager {
       Promise.all(promises).then(() => {
         let requestURL = interpolate(url, params)
         options.method = options.method || type.toUpperCase()
-        options.body = body ? merge({}, body, postData) : postData
-        let requesting = this.settings.requester(requestURL, options)
+        options.body = JSON.stringify(body ? merge({}, body, postData) : postData)
+        let requesting = this._request(requestURL, options)
         .then(res => {
           resolve(res)
         })
@@ -333,5 +333,22 @@ export default class DataManager {
         reject(e)
       })
     })
+  }
+  _request(url, options) {
+    let { middlewares } = this
+    let _options = merge({}, options)
+    let i = 0
+
+    let next = () => {
+      let pipe = middlewares[i]
+      if (!pipe) {
+        return
+      }
+      i ++
+      pipe(_options, next)
+    }
+    next()
+
+    return this.settings.requester(url, _options)
   }
 }

@@ -71,10 +71,11 @@ To new a datamanager instance.
 
 ```
 {
-  requester: fetch, // function(url, options), use which library to send request, you can use axios to create a function, default using `fetch`
   host: '', // string, i.e. https://yourdomain.com/api, which will be connected with your given url in component
   expires: 10*1000, // 10ms cached
   debug: false, // console.log some internal information, now no use
+  requester: fetch, // function(url, options), use which library to send request, you can use axios to create a function, default using `fetch`
+  middlewares: [], // [function(options, next)], middlewares to modify request options before send, read more from `middleware` api.
 }
 ```
 
@@ -286,6 +287,25 @@ Current default configs is:
 It means all components will use this options when they initialize.
 
 Notice: if you use `config` after a initailiztion, you will find the previous instances have no change, and the behind instances will use new config.
+
+### middleware(mw)
+
+Add a new middleware into global middlewares list, if you want to set a special middleware in your component, use settings.middlewares to set.
+A middleware has the ability to modify request options (`fetch(url, options)`'s options) before request has been sent.
+It is useful to do authentication.
+
+A middleware is a function like:
+
+```
+function(options, next) {
+  // options.headers = {
+  //   "Content-Type": "application/json",
+  // }
+  next()
+}
+```
+
+In your middleware, you should run `next()` if you want to pass options to next middleware, if you do not run `next()`, the request will be sent after this middleware is executed.
 
 ## Shared datasource
 
