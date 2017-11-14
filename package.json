@@ -1,12 +1,13 @@
 {
   "name": "datamanager.js",
-  "version": "0.0.2",
+  "version": "0.0.3",
   "description": "A frontend data sources management resolution among different components/application.",
   "main": "dist/datamanager.js",
   "directories": {
     "example": "examples"
   },
   "scripts": {
+    "prepublishOnly": "npm run build",
     "start": "webpack --config ./examples/webpack.config.js && node ./examples/server.js",
     "build": "webpack"
   },
