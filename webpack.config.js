@@ -1,8 +1,9 @@
 module.exports = {
-  entry: __dirname + '/index.js',
+  entry: __dirname + '/datamanager.js',
   output: {
-    path: __dirname,
-    filename: 'dist.js',
+    path: __dirname + '/dist',
+    filename: 'datamanager.js',
+    library: 'DataManager',
     libraryTarget: 'umd',
   },
   module: {
@@ -18,4 +19,5 @@ module.exports = {
       },
     ],
   },
+  externals: [require('webpack-node-externals')()],
 }

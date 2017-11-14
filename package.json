@@ -1,0 +1,41 @@
+{
+  "name": "datamanager.js",
+  "version": "0.0.1",
+  "description": "A data manager package which can share data among different components/application.",
+  "main": "dist/datamanager.js",
+  "directories": {
+    "example": "examples"
+  },
+  "scripts": {
+    "start": "webpack --config ./examples/webpack.config.js && node ./examples/server.js",
+    "build": "webpack"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/tangshuang/datamanager.js.git"
+  },
+  "keywords": [
+    "datamanager"
+  ],
+  "author": "tangshuang",
+  "license": "MIT",
+  "bugs": {
+    "url": "https://github.com/tangshuang/datamanager.js/issues"
+  },
+  "homepage": "https://github.com/tangshuang/datamanager.js#readme",
+  "dependencies": {
+    "hash-string": "^1.0.0",
+    "interpolate": "^0.1.0",
+    "lodash.clonedeep": "^4.5.0",
+    "lodash.merge": "^4.6.0"
+  },
+  "devDependencies": {
+    "babel-core": "^6.26.0",
+    "babel-loader": "^7.1.2",
+    "babel-preset-env": "^1.6.1",
+    "express": "^4.16.2",
+    "open": "0.0.5",
+    "webpack": "^3.8.1",
+    "webpack-node-externals": "^1.6.0"
+  }
+}

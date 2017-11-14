@@ -43,9 +43,6 @@ return /******/ (function(modules) { // webpackBootstrap
 /******/ 	// expose the module cache
 /******/ 	__webpack_require__.c = installedModules;
 /******/
-/******/ 	// identity function for calling harmony imports with the correct context
-/******/ 	__webpack_require__.i = function(value) { return value; };
-/******/
 /******/ 	// define getter function for harmony exports
 /******/ 	__webpack_require__.d = function(exports, name, getter) {
 /******/ 		if(!__webpack_require__.o(exports, name)) {
@@ -73,71 +70,11 @@ return /******/ (function(modules) { // webpackBootstrap
 /******/ 	__webpack_require__.p = "";
 /******/
 /******/ 	// Load entry module and return exports
-/******/ 	return __webpack_require__(__webpack_require__.s = 9);
+/******/ 	return __webpack_require__(__webpack_require__.s = 3);
 /******/ })
 /************************************************************************/
 /******/ ([
 /* 0 */
-/***/ (function(module, exports, __webpack_require__) {
-
-"use strict";
-
-
-var _typeof = typeof Symbol === "function" && typeof Symbol.iterator === "symbol" ? function (obj) { return typeof obj; } : function (obj) { return obj && typeof Symbol === "function" && obj.constructor === Symbol && obj !== Symbol.prototype ? "symbol" : typeof obj; };
-
-var g;
-
-// This works in non-strict mode
-g = function () {
-	return this;
-}();
-
-try {
-	// This works if eval is allowed (see CSP)
-	g = g || Function("return this")() || (1, eval)("this");
-} catch (e) {
-	// This works if the window reference is available
-	if ((typeof window === "undefined" ? "undefined" : _typeof(window)) === "object") g = window;
-}
-
-// g can still be undefined, but nothing to do about it...
-// We return undefined, instead of nothing here, so it's
-// easier to handle this case. if(!global) { ...}
-
-module.exports = g;
-
-/***/ }),
-/* 1 */
-/***/ (function(module, exports, __webpack_require__) {
-
-"use strict";
-
-
-module.exports = function (module) {
-	if (!module.webpackPolyfill) {
-		module.deprecate = function () {};
-		module.paths = [];
-		// module.parent = undefined by default
-		if (!module.children) module.children = [];
-		Object.defineProperty(module, "loaded", {
-			enumerable: true,
-			get: function get() {
-				return module.l;
-			}
-		});
-		Object.defineProperty(module, "id", {
-			enumerable: true,
-			get: function get() {
-				return module.i;
-			}
-		});
-		module.webpackPolyfill = 1;
-	}
-	return module;
-};
-
-/***/ }),
-/* 2 */
 /***/ (function(module, exports, __webpack_require__) {
 
 "use strict";
@@ -149,21 +86,21 @@ Object.defineProperty(exports, "__esModule", {
 
 var _createClass = function () { function defineProperties(target, props) { for (var i = 0; i < props.length; i++) { var descriptor = props[i]; descriptor.enumerable = descriptor.enumerable || false; descriptor.configurable = true; if ("value" in descriptor) descriptor.writable = true; Object.defineProperty(target, descriptor.key, descriptor); } } return function (Constructor, protoProps, staticProps) { if (protoProps) defineProperties(Constructor.prototype, protoProps); if (staticProps) defineProperties(Constructor, staticProps); return Constructor; }; }();
 
-exports.setConfig = setConfig;
+exports.config = config;
 
 var _hashString = __webpack_require__(5);
 
 var _hashString2 = _interopRequireDefault(_hashString);
 
-var _lodash = __webpack_require__(7);
+var _lodash = __webpack_require__(6);
 
 var _lodash2 = _interopRequireDefault(_lodash);
 
-var _lodash3 = __webpack_require__(8);
+var _lodash3 = __webpack_require__(7);
 
 var _lodash4 = _interopRequireDefault(_lodash3);
 
-var _interpolate = __webpack_require__(6);
+var _interpolate = __webpack_require__(8);
 
 var _interpolate2 = _interopRequireDefault(_interpolate);
 
@@ -173,11 +110,21 @@ function _classCallCheck(instance, Constructor) { if (!(instance instanceof Cons
 
 var pool = {};
 var queue = {};
+var transactionResolves = {};
+var transactionPromises = {};
+var transactionData = {};
+var transactionTimers = {};
 var configs = {
   host: '',
   expires: 10 * 1000,
   debug: false
 };
+
+function config() {
+  var cfgs = arguments.length > 0 && arguments[0] !== undefined ? arguments[0] : {};
+
+  (0, _lodash4.default)(configs, cfgs);
+}
 
 function addDataSource(source) {
   var hash = source.hash,
@@ -284,12 +231,14 @@ var DataManager = function () {
           url = datasource.url,
           type = datasource.type,
           transformers = datasource.transformers;
+      var host = this.settings.host;
 
-      var hash = (0, _hashString2.default)(type + ':' + url);
+      var requestURL = url.indexOf('http://') > -1 || url.indexOf('https://') > -1 ? url : host + url;
+      var hash = (0, _hashString2.default)(type + ':' + requestURL);
       var source = {
         hash: hash,
         type: type,
-        url: url
+        url: requestURL
       };
 
       addDataSource(source);
@@ -435,7 +384,6 @@ var DataManager = function () {
         this._addDep();
       }
 
-      var host = this.settings.host;
       var url = datasource.url,
           type = datasource.type,
           transformers = datasource.transformers;
@@ -447,7 +395,7 @@ var DataManager = function () {
         if (queue[requestId]) {
           return queue[requestId];
         }
-        var requestURL = (host ? host : '') + (0, _interpolate2.default)(url, params);
+        var requestURL = (0, _interpolate2.default)(url, params);
         options.method = options.method || type.toUpperCase();
         var requesting = fetch(requestURL, options).then(function (res) {
           queue[requestId] = null;
@@ -500,20 +448,157 @@ var DataManager = function () {
         return undefined;
       }
     }
+  }, {
+    key: 'save',
+    value: function save(id) {
+      var params = arguments.length > 1 && arguments[1] !== undefined ? arguments[1] : {};
+      var data = arguments[2];
+      var options = arguments.length > 3 && arguments[3] !== undefined ? arguments[3] : {};
+
+      var datasource = this.datasources[id];
+      if (!datasource) {
+        throw new Error('Datasource ' + id + ' is not exists.');
+      }
+
+      var url = datasource.url,
+          type = datasource.type;
+
+      var requestId = (0, _hashString2.default)(type + ':' + url + ':' + JSON.stringify(params) + (type.toUpperCase() === 'POST' && options.body ? ':' + JSON.stringify(options.body) : ''));
+
+      var resolves = transactionResolves[requestId] = transactionResolves[requestId] || [];
+      var promises = transactionPromises[requestId] = transactionPromises[requestId] || [];
+      var d = transactionData[requestId] = transactionData[requestId] || {};
+      var postData = (0, _lodash4.default)(d, data);
+
+      transactionData[requestId] = postData;
+      promises.push(new Promise(function (resolve) {
+        return resolves.push(resolve);
+      }));
+
+      if (transactionTimers[requestId]) {
+        clearTimeout(transactionTimers[requestId]);
+      }
+
+      transactionTimers[requestId] = setTimeout(function () {
+        resolves.forEach(function (resolve) {
+          return resolve();
+        });
+        transactionResolves[requestId] = [];
+        transactionPromises[requestId] = [];
+        transactionData[requestId] = {};
+      }, 10);
+
+      return new Promise(function (resolve, reject) {
+        Promise.all(promises).then(function () {
+          var requestURL = (0, _interpolate2.default)(url, params);
+          options.method = options.method || type.toUpperCase();
+          options.body = postData;
+          var requesting = fetch(requestURL, options).then(function (res) {
+            resolve(res);
+          }).catch(function (e) {
+            reject(e);
+          });
+        }).catch(function (e) {
+          reject(e);
+        });
+      });
+    }
   }]);
 
   return DataManager;
 }();
 
 exports.default = DataManager;
-function setConfig() {
-  var cfgs = arguments.length > 0 && arguments[0] !== undefined ? arguments[0] : {};
 
-  (0, _lodash4.default)(configs, cfgs);
+/***/ }),
+/* 1 */
+/***/ (function(module, exports, __webpack_require__) {
+
+"use strict";
+
+
+var _typeof = typeof Symbol === "function" && typeof Symbol.iterator === "symbol" ? function (obj) { return typeof obj; } : function (obj) { return obj && typeof Symbol === "function" && obj.constructor === Symbol && obj !== Symbol.prototype ? "symbol" : typeof obj; };
+
+var g;
+
+// This works in non-strict mode
+g = function () {
+	return this;
+}();
+
+try {
+	// This works if eval is allowed (see CSP)
+	g = g || Function("return this")() || (1, eval)("this");
+} catch (e) {
+	// This works if the window reference is available
+	if ((typeof window === "undefined" ? "undefined" : _typeof(window)) === "object") g = window;
 }
+
+// g can still be undefined, but nothing to do about it...
+// We return undefined, instead of nothing here, so it's
+// easier to handle this case. if(!global) { ...}
+
+module.exports = g;
+
+/***/ }),
+/* 2 */
+/***/ (function(module, exports, __webpack_require__) {
+
+"use strict";
+
+
+module.exports = function (module) {
+	if (!module.webpackPolyfill) {
+		module.deprecate = function () {};
+		module.paths = [];
+		// module.parent = undefined by default
+		if (!module.children) module.children = [];
+		Object.defineProperty(module, "loaded", {
+			enumerable: true,
+			get: function get() {
+				return module.l;
+			}
+		});
+		Object.defineProperty(module, "id", {
+			enumerable: true,
+			get: function get() {
+				return module.i;
+			}
+		});
+		module.webpackPolyfill = 1;
+	}
+	return module;
+};
 
 /***/ }),
 /* 3 */
+/***/ (function(module, exports, __webpack_require__) {
+
+"use strict";
+
+
+var _componentA = __webpack_require__(4);
+
+var _componentA2 = _interopRequireDefault(_componentA);
+
+var _componentB = __webpack_require__(9);
+
+var _componentB2 = _interopRequireDefault(_componentB);
+
+function _interopRequireDefault(obj) { return obj && obj.__esModule ? obj : { default: obj }; }
+
+var $el = document.querySelector('#app');
+$el.innerHTML = '\n  <h3>rendered by componentA:</h3>\n  <div id="container1"></div>\n  <h3>rendered by componentB:</h3>\n  <div id="container2"></div>\n';
+
+var a = new _componentA2.default('#container1');
+var b = new _componentB2.default('#container2');
+
+document.querySelector('#refresh').addEventListener('click', function (e) {
+  b.render();
+});
+
+/***/ }),
+/* 4 */
 /***/ (function(module, exports, __webpack_require__) {
 
 "use strict";
@@ -525,7 +610,7 @@ Object.defineProperty(exports, "__esModule", {
 
 var _createClass = function () { function defineProperties(target, props) { for (var i = 0; i < props.length; i++) { var descriptor = props[i]; descriptor.enumerable = descriptor.enumerable || false; descriptor.configurable = true; if ("value" in descriptor) descriptor.writable = true; Object.defineProperty(target, descriptor.key, descriptor); } } return function (Constructor, protoProps, staticProps) { if (protoProps) defineProperties(Constructor.prototype, protoProps); if (staticProps) defineProperties(Constructor, staticProps); return Constructor; }; }();
 
-var _datamanager = __webpack_require__(2);
+var _datamanager = __webpack_require__(0);
 
 var _datamanager2 = _interopRequireDefault(_datamanager);
 
@@ -558,62 +643,6 @@ var ComponentA = function () {
         list += '<li>' + std.name + ': ' + std.score + '</li>';
       });
       var html = '<ul>' + list + '</ul>';
-      document.querySelector(this.container).innerHTML = html;
-    }
-  }]);
-
-  return ComponentA;
-}();
-
-exports.default = ComponentA;
-
-/***/ }),
-/* 4 */
-/***/ (function(module, exports, __webpack_require__) {
-
-"use strict";
-
-
-Object.defineProperty(exports, "__esModule", {
-  value: true
-});
-
-var _createClass = function () { function defineProperties(target, props) { for (var i = 0; i < props.length; i++) { var descriptor = props[i]; descriptor.enumerable = descriptor.enumerable || false; descriptor.configurable = true; if ("value" in descriptor) descriptor.writable = true; Object.defineProperty(target, descriptor.key, descriptor); } } return function (Constructor, protoProps, staticProps) { if (protoProps) defineProperties(Constructor.prototype, protoProps); if (staticProps) defineProperties(Constructor, staticProps); return Constructor; }; }();
-
-var _datamanager = __webpack_require__(2);
-
-var _datamanager2 = _interopRequireDefault(_datamanager);
-
-function _interopRequireDefault(obj) { return obj && obj.__esModule ? obj : { default: obj }; }
-
-function _classCallCheck(instance, Constructor) { if (!(instance instanceof Constructor)) { throw new TypeError("Cannot call a class as a function"); } }
-
-var ComponentA = function () {
-  function ComponentA(container) {
-    _classCallCheck(this, ComponentA);
-
-    this.container = container;
-    var datasources = [{
-      id: 'studentsB',
-      url: '/students',
-      type: 'GET'
-    }];
-    this.data = new _datamanager2.default(datasources, { debug: true, expires: 1000 });
-    this.data.autorun(this.render.bind(this));
-  }
-
-  _createClass(ComponentA, [{
-    key: 'render',
-    value: function render() {
-      var students = this.data.get('studentsB');
-      if (!students) {
-        return;
-      }
-      var list = '';
-      students.forEach(function (std) {
-        list += '\n        <tr>\n          <td>' + std.name + '</td>\n          <td>' + std.score + '</td>\n        </tr>\n      ';
-      });
-      var html = '\n      <table border="0" cellspacing="0" cellpadding="0">\n        ' + list + '\n      </table>\n    ';
       document.querySelector(this.container).innerHTML = html;
     }
   }]);
@@ -666,78 +695,6 @@ var _typeof = typeof Symbol === "function" && typeof Symbol.iterator === "symbol
 
 /***/ }),
 /* 6 */
-/***/ (function(module, exports, __webpack_require__) {
-
-"use strict";
-
-
-/**
- port of http://www.bbc.co.uk/glow/docs/1.7/api/glow.lang.shtml #interpolate
-  Modified to be stand-alone and offer support for delimters of random length
-  @description Replaces placeholders in a string with data from an object
-
-  @param {String} template The string containing {placeholders}
-  @param {Object} data Object containing the data to be merged in to the template
-    The object can contain nested data objects and arrays, with nested object properties and array elements are accessed using dot notation. eg foo.bar or foo.0.
-    The data labels in the object cannot contain characters used in the template delimiters, so if the data must be allowed to contain the default { and } delimiters, the delimters must be changed using the option below.
-  @param {Object} opts Options object
-    @param {String} [opts.delimiter="{}"] Alternative label delimiter(s) for the template. Needs to be symmetric, i.e. '{{}}', '<%%>'
-
-  @returns {String}
- */
-
-function interpolate(template, data, opts) {
-  var regex,
-      lDel,
-      rDel,
-      delLen,
-      lDelLen,
-      delimiter,
-
-  // For escaping strings to go in regex
-  regexEscape = /([$\^\\\/()|?+*\[\]{}.\-])/g;
-
-  opts = opts || {};
-
-  delimiter = opts.delimiter || '{}';
-  delLen = delimiter.length;
-  lDelLen = Math.ceil(delLen / 2);
-  // escape delimiters for regex
-  lDel = delimiter.substr(0, lDelLen).replace(regexEscape, "\\$1");
-  rDel = delimiter.substr(lDelLen, delLen).replace(regexEscape, "\\$1") || lDel;
-
-  // construct the new regex
-  regex = new RegExp(lDel + "[^" + lDel + rDel + "]+" + rDel, "g");
-
-  return template.replace(regex, function (placeholder) {
-    var key = placeholder.slice(lDelLen, -lDelLen),
-        keyParts = key.split("."),
-        val,
-        i = 0,
-        len = keyParts.length;
-
-    if (key in data) {
-      // need to be backwards compatible with "flattened" data.
-      val = data[key];
-    } else {
-      // look up the chain
-      val = data;
-      for (; i < len; i++) {
-        if (keyParts[i] in val) {
-          val = val[keyParts[i]];
-        } else {
-          return placeholder;
-        }
-      }
-    }
-    return val;
-  });
-}
-
-module.exports = interpolate;
-
-/***/ }),
-/* 7 */
 /***/ (function(module, exports, __webpack_require__) {
 
 "use strict";
@@ -2464,10 +2421,10 @@ function stubFalse() {
 }
 
 module.exports = cloneDeep;
-/* WEBPACK VAR INJECTION */}.call(exports, __webpack_require__(0), __webpack_require__(1)(module)))
+/* WEBPACK VAR INJECTION */}.call(exports, __webpack_require__(1), __webpack_require__(2)(module)))
 
 /***/ }),
-/* 8 */
+/* 7 */
 /***/ (function(module, exports, __webpack_require__) {
 
 "use strict";
@@ -4626,7 +4583,79 @@ function stubFalse() {
 }
 
 module.exports = merge;
-/* WEBPACK VAR INJECTION */}.call(exports, __webpack_require__(0), __webpack_require__(1)(module)))
+/* WEBPACK VAR INJECTION */}.call(exports, __webpack_require__(1), __webpack_require__(2)(module)))
+
+/***/ }),
+/* 8 */
+/***/ (function(module, exports, __webpack_require__) {
+
+"use strict";
+
+
+/**
+ port of http://www.bbc.co.uk/glow/docs/1.7/api/glow.lang.shtml #interpolate
+  Modified to be stand-alone and offer support for delimters of random length
+  @description Replaces placeholders in a string with data from an object
+
+  @param {String} template The string containing {placeholders}
+  @param {Object} data Object containing the data to be merged in to the template
+    The object can contain nested data objects and arrays, with nested object properties and array elements are accessed using dot notation. eg foo.bar or foo.0.
+    The data labels in the object cannot contain characters used in the template delimiters, so if the data must be allowed to contain the default { and } delimiters, the delimters must be changed using the option below.
+  @param {Object} opts Options object
+    @param {String} [opts.delimiter="{}"] Alternative label delimiter(s) for the template. Needs to be symmetric, i.e. '{{}}', '<%%>'
+
+  @returns {String}
+ */
+
+function interpolate(template, data, opts) {
+  var regex,
+      lDel,
+      rDel,
+      delLen,
+      lDelLen,
+      delimiter,
+
+  // For escaping strings to go in regex
+  regexEscape = /([$\^\\\/()|?+*\[\]{}.\-])/g;
+
+  opts = opts || {};
+
+  delimiter = opts.delimiter || '{}';
+  delLen = delimiter.length;
+  lDelLen = Math.ceil(delLen / 2);
+  // escape delimiters for regex
+  lDel = delimiter.substr(0, lDelLen).replace(regexEscape, "\\$1");
+  rDel = delimiter.substr(lDelLen, delLen).replace(regexEscape, "\\$1") || lDel;
+
+  // construct the new regex
+  regex = new RegExp(lDel + "[^" + lDel + rDel + "]+" + rDel, "g");
+
+  return template.replace(regex, function (placeholder) {
+    var key = placeholder.slice(lDelLen, -lDelLen),
+        keyParts = key.split("."),
+        val,
+        i = 0,
+        len = keyParts.length;
+
+    if (key in data) {
+      // need to be backwards compatible with "flattened" data.
+      val = data[key];
+    } else {
+      // look up the chain
+      val = data;
+      for (; i < len; i++) {
+        if (keyParts[i] in val) {
+          val = val[keyParts[i]];
+        } else {
+          return placeholder;
+        }
+      }
+    }
+    return val;
+  });
+}
+
+module.exports = interpolate;
 
 /***/ }),
 /* 9 */
@@ -4635,25 +4664,54 @@ module.exports = merge;
 "use strict";
 
 
-var _componentA = __webpack_require__(3);
+Object.defineProperty(exports, "__esModule", {
+  value: true
+});
 
-var _componentA2 = _interopRequireDefault(_componentA);
+var _createClass = function () { function defineProperties(target, props) { for (var i = 0; i < props.length; i++) { var descriptor = props[i]; descriptor.enumerable = descriptor.enumerable || false; descriptor.configurable = true; if ("value" in descriptor) descriptor.writable = true; Object.defineProperty(target, descriptor.key, descriptor); } } return function (Constructor, protoProps, staticProps) { if (protoProps) defineProperties(Constructor.prototype, protoProps); if (staticProps) defineProperties(Constructor, staticProps); return Constructor; }; }();
 
-var _componentB = __webpack_require__(4);
+var _datamanager = __webpack_require__(0);
 
-var _componentB2 = _interopRequireDefault(_componentB);
+var _datamanager2 = _interopRequireDefault(_datamanager);
 
 function _interopRequireDefault(obj) { return obj && obj.__esModule ? obj : { default: obj }; }
 
-var $el = document.querySelector('#app');
-$el.innerHTML = '\n  <h3>rendered by componentA:</h3>\n  <div id="container1"></div>\n  <h3>rendered by componentB:</h3>\n  <div id="container2"></div>\n';
+function _classCallCheck(instance, Constructor) { if (!(instance instanceof Constructor)) { throw new TypeError("Cannot call a class as a function"); } }
 
-var a = new _componentA2.default('#container1');
-var b = new _componentB2.default('#container2');
+var ComponentA = function () {
+  function ComponentA(container) {
+    _classCallCheck(this, ComponentA);
 
-document.querySelector('#refresh').addEventListener('click', function (e) {
-  b.render();
-});
+    this.container = container;
+    var datasources = [{
+      id: 'studentsB',
+      url: '/students',
+      type: 'GET'
+    }];
+    this.data = new _datamanager2.default(datasources, { debug: true, expires: 1000 });
+    this.data.autorun(this.render.bind(this));
+  }
+
+  _createClass(ComponentA, [{
+    key: 'render',
+    value: function render() {
+      var students = this.data.get('studentsB');
+      if (!students) {
+        return;
+      }
+      var list = '';
+      students.forEach(function (std) {
+        list += '\n        <tr>\n          <td>' + std.name + '</td>\n          <td>' + std.score + '</td>\n        </tr>\n      ';
+      });
+      var html = '\n      <table border="0" cellspacing="0" cellpadding="0">\n        ' + list + '\n      </table>\n    ';
+      document.querySelector(this.container).innerHTML = html;
+    }
+  }]);
+
+  return ComponentA;
+}();
+
+exports.default = ComponentA;
 
 /***/ })
 /******/ ]);

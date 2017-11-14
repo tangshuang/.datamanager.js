@@ -15,6 +15,10 @@ const configs = {
   debug: false,
 }
 
+export function config(cfgs = {}) {
+  merge(configs, cfgs)
+}
+
 function addDataSource(source) {
   let { hash, url, type } = source
   if (pool[hash]) {
@@ -91,11 +95,13 @@ export default class DataManager {
   }
   register(datasource) {
     let { id, url, type, transformers } = datasource
-    let hash = hashstr(type + ':' + url)
+    let { host } = this.settings
+    let requestURL = url.indexOf('http://') > -1 || url.indexOf('https://') > -1 ? url : host + url
+    let hash = hashstr(type + ':' + requestURL)
     let source = {
       hash,
       type,
-      url,
+      url: requestURL,
     }
 
     addDataSource(source)
@@ -205,7 +211,6 @@ export default class DataManager {
       this._addDep()
     }
 
-    let { host } = this.settings
     let { url, type, transformers } = datasource
     let requestId = hashstr(type + ':' + url + ':' + JSON.stringify(params) + (type.toUpperCase() === 'POST' && options.body ? ':' + JSON.stringify(options.body) : ''))
     let source = pool[datasource.hash]
@@ -214,7 +219,7 @@ export default class DataManager {
       if (queue[requestId]) {
         return queue[requestId]
       }
-      let requestURL = (host ? host : '') + interpolate(url, params)
+      let requestURL = interpolate(url, params)
       options.method = options.method || type.toUpperCase()
       let requesting = fetch(requestURL, options)
       .then(res => {
@@ -272,7 +277,6 @@ export default class DataManager {
       throw new Error('Datasource ' + id + ' is not exists.')
     }
 
-    let { host } = this.settings
     let { url, type } = datasource
     let requestId = hashstr(type + ':' + url + ':' + JSON.stringify(params) + (type.toUpperCase() === 'POST' && options.body ? ':' + JSON.stringify(options.body) : ''))
 
@@ -297,7 +301,7 @@ export default class DataManager {
 
     return new Promise((resolve, reject) => {
       Promise.all(promises).then(() => {
-        let requestURL = (host ? host : '') + interpolate(url, params)
+        let requestURL = interpolate(url, params)
         options.method = options.method || type.toUpperCase()
         options.body = postData
         let requesting = fetch(requestURL, options)
@@ -313,8 +317,4 @@ export default class DataManager {
       })
     })
   }
-}
-
-export function setConfig(cfgs = {}) {
-  merge(configs, cfgs)
 }
