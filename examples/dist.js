@@ -87,6 +87,7 @@ Object.defineProperty(exports, "__esModule", {
 var _createClass = function () { function defineProperties(target, props) { for (var i = 0; i < props.length; i++) { var descriptor = props[i]; descriptor.enumerable = descriptor.enumerable || false; descriptor.configurable = true; if ("value" in descriptor) descriptor.writable = true; Object.defineProperty(target, descriptor.key, descriptor); } } return function (Constructor, protoProps, staticProps) { if (protoProps) defineProperties(Constructor.prototype, protoProps); if (staticProps) defineProperties(Constructor, staticProps); return Constructor; }; }();
 
 exports.config = config;
+exports.middleware = middleware;
 
 var _hashString = __webpack_require__(5);
 
@@ -108,13 +109,19 @@ function _interopRequireDefault(obj) { return obj && obj.__esModule ? obj : { de
 
 function _classCallCheck(instance, Constructor) { if (!(instance instanceof Constructor)) { throw new TypeError("Cannot call a class as a function"); } }
 
+// for shared data source
 var pool = {};
+// for .get requests
 var queue = {};
+// for .save requests
 var transactionResolves = {};
 var transactionPromises = {};
 var transactionData = {};
 var transactionTimers = {};
+
+var middlewares = [];
 var configs = {
+  requester: fetch.bind(window),
   host: '',
   expires: 10 * 1000,
   debug: false
@@ -124,6 +131,10 @@ function config() {
   var cfgs = arguments.length > 0 && arguments[0] !== undefined ? arguments[0] : {};
 
   (0, _lodash4.default)(configs, cfgs);
+}
+
+function middleware(mw) {
+  middlewares.push(mw);
 }
 
 function addDataSource(source) {
@@ -142,7 +153,7 @@ function addDataSource(source) {
   };
 }
 
-function addDataItem(source, requestId, data) {
+function setDataItem(source, requestId, data) {
   var store = source.store;
 
   var item = store[requestId] = store[requestId] || {};
@@ -175,17 +186,6 @@ function trigger(callbacks) {
   });
 }
 
-function transform(data, transformers) {
-  if (!transformers || !transformers.length) {
-    return data;
-  }
-  var result = data;
-  transformers.forEach(function (transformer) {
-    result = transform(result);
-  });
-  return result;
-}
-
 function isEqual(obj1, obj2) {
   if (Object.keys(obj1).length == 0 && Object.keys(obj2).length === 0) {
     return true;
@@ -204,7 +204,13 @@ var DataManager = function () {
 
     this.datasources = {};
     this.id = 'datamanager.' + Date.now() + '.' + parseInt(Math.random() * 10000);
+
+    var mws = settings.middlewares;
+    delete settings.middlewares;
+    this.middlewares = mws ? middlewares.concat(mws) : middlewares;
+
     this.settings = (0, _lodash4.default)({}, configs, settings);
+
     datasources.forEach(function (datasource) {
       return _this.register(datasource);
     });
@@ -230,15 +236,17 @@ var DataManager = function () {
       var id = datasource.id,
           url = datasource.url,
           type = datasource.type,
+          body = datasource.body,
           transformers = datasource.transformers;
       var host = this.settings.host;
 
       var requestURL = url.indexOf('http://') > -1 || url.indexOf('https://') > -1 ? url : host + url;
-      var hash = (0, _hashString2.default)(type + ':' + requestURL);
+      var hash = (0, _hashString2.default)(type + ':' + requestURL + (body ? ':' + JSON.stringify(body) : ''));
       var source = {
         hash: hash,
+        url: requestURL,
         type: type,
-        url: requestURL
+        body: body
       };
 
       addDataSource(source);
@@ -369,6 +377,8 @@ var DataManager = function () {
   }, {
     key: 'get',
     value: function get(id) {
+      var _this6 = this;
+
       var params = arguments.length > 1 && arguments[1] !== undefined ? arguments[1] : {};
       var options = arguments.length > 2 && arguments[2] !== undefined ? arguments[2] : {};
 
@@ -386,23 +396,25 @@ var DataManager = function () {
 
       var url = datasource.url,
           type = datasource.type,
+          body = datasource.body,
           transformers = datasource.transformers;
 
-      var requestId = (0, _hashString2.default)(type + ':' + url + ':' + JSON.stringify(params) + (type.toUpperCase() === 'POST' && options.body ? ':' + JSON.stringify(options.body) : ''));
+      var requestURL = (0, _interpolate2.default)(url, params);
+      var requestId = (0, _hashString2.default)(type + ':' + requestURL + (type.toUpperCase() === 'POST' && options.body ? ':' + JSON.stringify(options.body) : ''));
       var source = pool[datasource.hash];
 
       var request = function request() {
         if (queue[requestId]) {
           return queue[requestId];
         }
-        var requestURL = (0, _interpolate2.default)(url, params);
         options.method = options.method || type.toUpperCase();
-        var requesting = fetch(requestURL, options).then(function (res) {
+        options.body = options.body ? JSON.stringify(body ? (0, _lodash4.default)({}, body, options.body) : options.body) : body ? JSON.stringify(body) : undefined;
+        var requesting = _this6._request(requestURL, options).then(function (res) {
           queue[requestId] = null;
           return res.json();
         }) // only json supported
         .then(function (data) {
-          addDataItem(source, requestId, data);
+          setDataItem(source, requestId, data);
           var callbacks = source.callbacks;
           trigger(callbacks, params);
         }).catch(function (e) {
@@ -412,7 +424,7 @@ var DataManager = function () {
         return requesting;
       };
       var use = function use(data) {
-        return transform((0, _lodash2.default)(data), transformers);
+        return _this6._transform((0, _lodash2.default)(data), transformers);
       };
 
       var store = source.store;
@@ -452,6 +464,9 @@ var DataManager = function () {
     key: 'save',
     value: function save(id) {
       var params = arguments.length > 1 && arguments[1] !== undefined ? arguments[1] : {};
+
+      var _this7 = this;
+
       var data = arguments[2];
       var options = arguments.length > 3 && arguments[3] !== undefined ? arguments[3] : {};
 
@@ -461,7 +476,8 @@ var DataManager = function () {
       }
 
       var url = datasource.url,
-          type = datasource.type;
+          type = datasource.type,
+          body = datasource.body;
 
       var requestId = (0, _hashString2.default)(type + ':' + url + ':' + JSON.stringify(params) + (type.toUpperCase() === 'POST' && options.body ? ':' + JSON.stringify(options.body) : ''));
 
@@ -492,8 +508,8 @@ var DataManager = function () {
         Promise.all(promises).then(function () {
           var requestURL = (0, _interpolate2.default)(url, params);
           options.method = options.method || type.toUpperCase();
-          options.body = postData;
-          var requesting = fetch(requestURL, options).then(function (res) {
+          options.body = JSON.stringify(body ? (0, _lodash4.default)({}, body, postData) : postData);
+          var requesting = _this7._request(requestURL, options).then(function (res) {
             resolve(res);
           }).catch(function (e) {
             reject(e);
@@ -502,6 +518,40 @@ var DataManager = function () {
           reject(e);
         });
       });
+    }
+  }, {
+    key: '_request',
+    value: function _request(url, options) {
+      var middlewares = this.middlewares;
+
+      var _options = (0, _lodash4.default)({}, options);
+      var i = 0;
+
+      var next = function next() {
+        var pipe = middlewares[i];
+        if (!pipe) {
+          return;
+        }
+        i++;
+        pipe(_options, next);
+      };
+      next();
+
+      return this.settings.requester(url, _options);
+    }
+  }, {
+    key: '_transform',
+    value: function _transform(data, transformers) {
+      var _this8 = this;
+
+      if (!transformers || !transformers.length) {
+        return data;
+      }
+      var result = data;
+      transformers.forEach(function (transformer) {
+        result = _this8._transform(result);
+      });
+      return result;
     }
   }]);
 

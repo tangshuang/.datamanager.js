@@ -12,9 +12,10 @@ const transactionResolves = {}
 const transactionPromises = {}
 const transactionData = {}
 const transactionTimers = {}
+
 const middlewares = []
 const configs = {
-  requester: fetch,
+  requester: fetch.bind(window),
   host: '',
   expires: 10*1000, 
   debug: false,
@@ -69,17 +70,6 @@ function trigger(callbacks, ...args) {
   callbacks.forEach(item => {
     item.callback(...args)
   })
-}
-
-function transform(data, transformers) {
-  if (!transformers || !transformers.length) {
-    return data
-  }
-  let result = data
-  transformers.forEach(transformer => {
-    result = transform(result)
-  })
-  return result
 }
 
 function isEqual(obj1, obj2) {
@@ -255,7 +245,7 @@ export default class DataManager {
       return requesting
     }
     let use = data => {
-      return transform(deepclone(data), transformers)
+      return this._transform(deepclone(data), transformers)
     }
     
     let { store } = source
@@ -350,5 +340,15 @@ export default class DataManager {
     next()
 
     return this.settings.requester(url, _options)
+  }
+  _transform(data, transformers) {
+    if (!transformers || !transformers.length) {
+      return data
+    }
+    let result = data
+    transformers.forEach(transformer => {
+      result = this._transform(result)
+    })
+    return result
   }
 }
