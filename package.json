@@ -1,6 +1,6 @@
 {
   "name": "datamanager.js",
-  "version": "0.0.10",
+  "version": "0.0.13",
   "description": "A frontend data sources management resolution among different components/application.",
   "main": "dist/datamanager.js",
   "scripts": {
@@ -13,7 +13,8 @@
     "url": "git+https://github.com/tangshuang/datamanager.js.git"
   },
   "keywords": [
-    "datamanager"
+    "data",
+    "management"
   ],
   "author": "tangshuang",
   "license": "MIT",
