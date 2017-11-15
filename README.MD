@@ -291,21 +291,21 @@ Notice: if you use `config` after a initailiztion, you will find the previous in
 ### middleware(mw)
 
 Add a new middleware into global middlewares list, if you want to set a special middleware in your component, use settings.middlewares to set.
-A middleware has the ability to modify request options (`fetch(url, options)`'s options) before request has been sent.
+A middleware has the ability to modify request information before request has been sent.
 It is useful to do authentication.
 
 A middleware is a function like:
 
 ```
-function(options, next) {
-  // options.headers = {
+function(req, next) {
+  // req.headers = {
   //   "Content-Type": "application/json",
   // }
   next()
 }
 ```
 
-In your middleware, you should run `next()` if you want to pass options to next middleware, if you do not run `next()`, the request will be sent after this middleware is executed.
+In your middleware, you should run `next()` if you want to pass `req` to next middleware, if you do not run `next()`, the request will be sent immediately after this middleware is executed.
 
 ## Shared datasource
 

@@ -228,7 +228,7 @@ export default class DataManager {
       }
       options.method = options.method || type.toUpperCase()
       options.body = options.body ? JSON.stringify(body ? merge({}, body, options.body) : options.body) : (body ? JSON.stringify(body) : undefined)
-      let requesting = this._request(requestURL, options)
+      return this._request(requestURL, options)
       .then(res => {
         queue[requestId] = null
         return res.json()
@@ -242,7 +242,6 @@ export default class DataManager {
         queue[requestId] = null
         throw e
       })
-      return requesting
     }
     let use = data => {
       return this._transform(deepclone(data), transformers)
@@ -311,7 +310,7 @@ export default class DataManager {
         let requestURL = interpolate(url, params)
         options.method = options.method || type.toUpperCase()
         options.body = JSON.stringify(body ? merge({}, body, postData) : postData)
-        let requesting = this._request(requestURL, options)
+        this._request(requestURL, options)
         .then(res => {
           resolve(res)
         })
@@ -326,8 +325,10 @@ export default class DataManager {
   }
   _request(url, options) {
     let { middlewares } = this
-    let _options = merge({}, options)
+    let req = merge({}, options)
     let i = 0
+
+    req.url = url
 
     let next = () => {
       let pipe = middlewares[i]
@@ -335,11 +336,14 @@ export default class DataManager {
         return
       }
       i ++
-      pipe(_options, next)
+      pipe(req, next)
     }
     next()
 
-    return this.settings.requester(url, _options)
+    let _url = req.url
+    delete req.url
+
+    return this.settings.requester(_url, req)
   }
   _transform(data, transformers) {
     if (!transformers || !transformers.length) {
