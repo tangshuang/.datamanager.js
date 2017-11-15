@@ -99,6 +99,7 @@ Register a datasource in datamanager, notice, data source is shared with other c
   type: '', // string, 'GET' or 'POST', default request method to use. default is 'GET'
   body: {}, // if your `type` is 'POST', you may want to bring with some post data when you request, set these default post data here
   transformers: [() => {}], // [function], transform your data before getting data from data manager, you should pass a bound function or an arrow function if you use `this` in it.
+  expires: 10*1000, // number, ms
 }
 ```
 
@@ -288,7 +289,7 @@ It means all components will use this options when they initialize.
 
 Notice: if you use `config` after a initailiztion, you will find the previous instances have no change, and the behind instances will use new config.
 
-### middleware(mw)
+### use(middleware)
 
 Add a new middleware into global middlewares list, if you want to set a special middleware in your component, use settings.middlewares to set.
 A middleware has the ability to modify request information before request has been sent.
@@ -298,6 +299,7 @@ A middleware is a function like:
 
 ```
 function(req, next) {
+  // req.url = ...
   // req.headers = {
   //   "Content-Type": "application/json",
   // }

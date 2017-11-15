@@ -25,7 +25,7 @@ export function config(cfgs = {}) {
   merge(configs, cfgs)
 }
 
-export function middleware(mw) {
+export function use(mw) {
   middlewares.push(mw)
 }
 
@@ -99,7 +99,7 @@ export default class DataManager {
     }
   }
   register(datasource) {
-    let { id, url, type, body, transformers } = datasource
+    let { id, url, type, body, transformers, expires } = datasource
     let { host } = this.settings
     let requestURL = url.indexOf('http://') > -1 || url.indexOf('https://') > -1 ? url : host + url
     let hash = hashstr(type + ':' + requestURL + (body ? ':' + JSON.stringify(body) : ''))
@@ -111,7 +111,7 @@ export default class DataManager {
     }
 
     addDataSource(source)
-    this.datasources[id] = merge({}, source, { transformers })
+    this.datasources[id] = merge({}, source, { transformers, expires })
     
     return this
   }
@@ -249,7 +249,7 @@ export default class DataManager {
     
     let { store } = source
     let item = store[requestId]
-    let { expires } = this.settings
+    let expires = datasource.expires === undefined ? this.settings.expires : datasource.expires
 
     // if there is no data in pool, request data now
     if (!item) {
