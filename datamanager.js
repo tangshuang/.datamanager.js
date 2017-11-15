@@ -8,10 +8,7 @@ const pool = {}
 // for .get requests
 const queue = {}
 // for .save requests
-const transactionResolves = {}
-const transactionPromises = {}
-const transactionData = {}
-const transactionTimers = {}
+const transactions = {}
 
 const middlewares = []
 const configs = {
@@ -286,23 +283,33 @@ export default class DataManager {
     let { url, type, body } = datasource
     let requestId = hashstr(type + ':' + url + ':' + JSON.stringify(params) + (type.toUpperCase() === 'POST' && options.body ? ':' + JSON.stringify(options.body) : ''))
 
-    let resolves = transactionResolves[requestId] = transactionResolves[requestId] || []
-    let promises = transactionPromises[requestId] = transactionPromises[requestId] || []
-    let d = transactionData[requestId] = transactionData[requestId] || {}
-    let postData = merge(d, data)
-
-    transactionData[requestId] = postData
-    promises.push(new Promise(resolve => resolves.push(resolve)))
-
-    if (transactionTimers[requestId]) {
-      clearTimeout(transactionTimers[requestId])
+    let transaction = transactions[requestId]
+    let reset = () => {
+      return {
+        resolves: [],
+        promises: [],
+        data: {},
+        timer: null,
+      }
+    }
+    if (!transaction) {
+      transaction = transactions[requestId] = reset()
     }
 
-    transactionTimers[requestId] = setTimeout(() => {
+    let { resolves, promises, timer } = transaction
+    let d = transaction.data
+    let postData = merge(d, data)
+
+    transaction.data = postData
+    promises.push(new Promise(resolve => resolves.push(resolve)))
+
+    if (timer) {
+      clearTimeout(timer)
+    }
+
+    transaction.timer = setTimeout(() => {
       resolves.forEach(resolve => resolve())
-      transactionResolves[requestId] = []
-      transactionPromises[requestId] = []
-      transactionData[requestId] = {}
+      transactions[requestId] = reset()
     }, 10)
 
     return new Promise((resolve, reject) => {
