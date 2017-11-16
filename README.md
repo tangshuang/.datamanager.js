@@ -100,6 +100,9 @@ Register a datasource in datamanager, notice, data source is shared with other c
   body: {}, // if your `type` is 'POST', you may want to bring with some post data when you request, set these default post data here
   transformers: [() => {}], // [function], transform your data before getting data from data manager, you should pass a bound function or an arrow function if you use `this` in it.
   expires: 10*1000, // number, ms
+  immediate: {}, // object, if you pass a object to immediate option, data will be requested after register, 
+    // Notice, the object is `params` which is used by `.get` in fact. NEVER pass a string or some other types. 
+    // And always, there is no callback functions at this time, so the only purpose is initialize data more early.
 }
 ```
 

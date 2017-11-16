@@ -97,6 +97,7 @@ export default class DataManager {
   }
   register(datasource) {
     let { id, url, type, body, transformers, expires } = datasource
+    let params = datasource.immediate
     let { host } = this.settings
     let requestURL = url.indexOf('http://') > -1 || url.indexOf('https://') > -1 ? url : host + url
     let hash = hashstr(type + ':' + requestURL + (body ? ':' + JSON.stringify(body) : ''))
@@ -109,6 +110,10 @@ export default class DataManager {
 
     addDataSource(source)
     this.datasources[id] = merge({}, source, { transformers, expires })
+
+    if (params) {
+      this.get(id, params)
+    }
     
     return this
   }
