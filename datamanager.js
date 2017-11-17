@@ -206,7 +206,7 @@ export default class DataManager {
       this._deps = this._deps.filter(item => item.target !== fun)
     })
   }
-  get(id, params = {}, options = {}) {
+  get(id, params = {}, options = {}, force = false) {
     let datasource = this.datasources[id]
     if (!datasource) {
       throw new Error('Datasource ' + id + ' is not exists.')
@@ -224,6 +224,9 @@ export default class DataManager {
     let requestId = hashstr(type + ':' + requestURL + (type.toUpperCase() === 'POST' && options.body ? ':' + JSON.stringify(options.body) : ''))
     let source = pool[datasource.hash]
     
+    let use = data => {
+      return this._transform(deepclone(data), transformers)
+    }
     let request = () => {
       if (queue[requestId]) {
         return queue[requestId]
@@ -239,14 +242,17 @@ export default class DataManager {
         setDataItem(source, requestId, data)
         let callbacks = source.callbacks
         trigger(callbacks, params)
+        return use(data)
       })
       .catch(e => {
         queue[requestId] = null
         throw e
       })
     }
-    let use = data => {
-      return this._transform(deepclone(data), transformers)
+
+    // if force request data from server side
+    if (force) {
+      return request()
     }
     
     let { store } = source
@@ -276,7 +282,7 @@ export default class DataManager {
 
       // when data is expired, return undefined and request new data again
       queue[requestId] = request()
-      return undefined
+      return use(item.data)
     }
   }
   save(id, params = {}, data, options = {}) {

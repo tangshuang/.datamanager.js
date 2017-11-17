@@ -133,7 +133,7 @@ If callback is undefined, all callbacks of this datasource will be removed.
 
 You must to do this before you destroy your component, or you will face memory problem.
 
-### get(id, params, options)
+### get(id, params, options, force)
 
 Get data from datamanager. If data is not exists, it will request data from server side and return `undefined`.
 Don't be worry about several calls. If in a page has several components request a url at the same time, only one request will be sent, and all of them will get `undefined` and will be notified by subscribed callback functions.
@@ -163,6 +163,19 @@ If options.method is set, it will be used to cover datasource.type.
 However, your datasource.type given by `register` always cover this value. Read more from web api `fetch`.
 
 *Notice: you do not get the latest data request from server side, you just get latest data from managed cache.*
+
+**force**
+
+Boolean. Wether to request data directly from server side, without using local cache.
+If force is set to be 'true', you will get a promise, not the value:
+
+```
+this.datamanager.save('myid', myData).then(async () => {
+  let data = await this.datamanager.get('myid', {}, {}, true)
+})
+```
+
+Notice: when you forcely request, subscribers will be fired after data come back, and local cache will be update too. So it is a good way to use force request when you want to refresh local cached data.
 
 ### autorun(funcs)
 
@@ -359,6 +372,15 @@ Run a demo on your local machine:
 ```
 npm run start
 ```
+
+## Tips
+
+1) why we provide a `dispatch` method to modify data in datamanager?
+
+Because data is static context, it means data should not be changed. 
+A situation about change data is that: when you save data to server side, you do not want to wait the reqeust finished, you want to update datamanager, and update views at the same time.
+
+But in fact, a request to server side may occur errors, if the request fail, you should not update views at that time. So the recommended way is: use `.save` to update data to server side, and use `.get` to get data after request success.
 
 ## MIT License
 
