@@ -81,10 +81,6 @@ export default class DataManager {
     this.datasources = {}
     this.id = 'datamanager.' + Date.now() + '.' + parseInt(Math.random() * 10000)
 
-    let mws = settings.middlewares
-    delete settings.middlewares
-    this.middlewares = mws ? middlewares.concat(mws) : middlewares
-
     this.settings = merge({}, configs, settings)
 
     datasources.forEach(datasource => this.register(datasource))
@@ -96,7 +92,8 @@ export default class DataManager {
     }
   }
   register(datasource) {
-    let { id, url, type, body, transformers, expires } = datasource
+    let { id, url, type, body, transformers, middlewares, expires } = datasource
+    let settings = this.settings
     let params = datasource.immediate
     let { host } = this.settings
     let requestURL = url.indexOf('http://') > -1 || url.indexOf('https://') > -1 ? url : host + url
@@ -109,7 +106,7 @@ export default class DataManager {
     }
 
     addDataSource(source)
-    this.datasources[id] = merge({}, source, { transformers, expires })
+    this.datasources[id] = merge({}, source, { transformers, middlewares, expires })
 
     if (params) {
       this.get(id, params)
@@ -223,6 +220,7 @@ export default class DataManager {
     let requestURL = interpolate(url, params)
     let requestId = hashstr(type + ':' + requestURL + (type.toUpperCase() === 'POST' && options.body ? ':' + JSON.stringify(options.body) : ''))
     let source = pool[datasource.hash]
+    let settings = this.settings
     
     let use = data => {
       return this._transform(deepclone(data), transformers)
@@ -233,7 +231,8 @@ export default class DataManager {
       }
       options.method = options.method || type.toUpperCase()
       options.body = options.body ? JSON.stringify(body ? merge({}, body, options.body) : options.body) : (body ? JSON.stringify(body) : undefined)
-      return this._request(requestURL, options)
+      let mws = middlewares.concat(settings.middlewares || []).concat(datasource.middlewares || [])
+      return this._request(requestURL, options, mws)
       .then(res => {
         queue[requestId] = null
         return res.json()
@@ -257,7 +256,7 @@ export default class DataManager {
     
     let { store } = source
     let item = store[requestId]
-    let expires = datasource.expires === undefined ? this.settings.expires : datasource.expires
+    let expires = datasource.expires === undefined ? settings.expires : datasource.expires
 
     // if there is no data in pool, request data now
     if (!item) {
@@ -324,46 +323,39 @@ export default class DataManager {
     }, 10)
 
     return new Promise((resolve, reject) => {
-      Promise.all(promises).then(() => {
-        let requestURL = interpolate(url, params)
-        options.method = options.method || type.toUpperCase()
-        // Notice: only json supported in datamanager, developer should convert other data type to json before send
-        options.body = JSON.stringify(body ? merge({}, body, postData) : postData)
-        options.headers = merge({ 'Content-Type': 'application/json' }, options.headers || {})
-        this._request(requestURL, options)
-        .then(res => {
-          resolve(res)
+      Promise.all(promises)
+        .then(() => {
+          let requestURL = interpolate(url, params)
+          options.method = options.method || type.toUpperCase()
+          // Notice: only json supported in datamanager, developer should convert other data type to json before send
+          options.body = JSON.stringify(body ? merge({}, body, postData) : postData)
+          options.headers = merge({ 'Content-Type': 'application/json' }, options.headers || {})
+          let mws = middlewares.concat(settings.middlewares || []).concat(datasource.middlewares || [])
+          this._request(requestURL, options, mws)
+            .then(resolve)
+            .catch(reject)
         })
-        .catch(e => {
-          reject(e)
-        })
-      })
-      .catch(e => {
-        reject(e)
-      })
+        .catch(reject)
     })
   }
-  _request(url, options) {
-    let { middlewares } = this
+  _request(url, options, middlewares) {
     let req = merge({}, options)
-    let i = 0
-
     req.url = url
-
-    let next = () => {
-      let pipe = middlewares[i]
-      if (!pipe) {
-        return
+    
+    return new Promise((resolve, reject) => {
+      let i = 0
+      let roll = () => {
+        let pipe = middlewares[i]
+        if (!pipe) {
+          let _url = req.url
+          delete req.url
+          this.settings.requester(_url, req).then(resolve).catch(reject)
+        }
+        i ++
+        return new Promise(next => { pipe(req, next) }).then(roll).catch(reject)
       }
-      i ++
-      pipe(req, next)
-    }
-    next()
-
-    let _url = req.url
-    delete req.url
-
-    return this.settings.requester(_url, req)
+      roll()
+    })
   }
   _transform(data, transformers) {
     if (!transformers || !transformers.length) {
@@ -371,7 +363,7 @@ export default class DataManager {
     }
     let result = data
     transformers.forEach(transformer => {
-      result = this._transform(result)
+      result = transformer(result) || result
     })
     return result
   }

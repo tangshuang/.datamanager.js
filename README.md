@@ -99,6 +99,7 @@ Register a datasource in datamanager, notice, data source is shared with other c
   type: '', // string, 'GET' or 'POST', default request method to use. default is 'GET'
   body: {}, // if your `type` is 'POST', you may want to bring with some post data when you request, set these default post data here
   transformers: [() => {}], // [function], transform your data before getting data from data manager, you should pass a bound function or an arrow function if you use `this` in it.
+  middlewares: [() => {}], // [function], transform each request before it is sent
   expires: 10*1000, // number, ms
   immediate: {}, // object, if you pass a object to immediate option, data will be requested after register, 
     // Notice, the object is `params` which is used by `.get` in fact. NEVER pass a string or some other types. 
@@ -323,7 +324,7 @@ function(req, next) {
 }
 ```
 
-In your middleware, you should run `next()` if you want to pass `req` to next middleware, if you do not run `next()`, the request will be sent immediately after this middleware is executed.
+NOTICE: In your middleware, you MUST run `next()` to pass `req` to next middleware, if you do not run `next()`, the request will NEVER be sent.
 
 ## Shared datasource
 
@@ -381,6 +382,68 @@ Because data is static context, it means data should not be changed.
 A situation about change data is that: when you save data to server side, you do not want to wait the reqeust finished, you want to update datamanager, and update views at the same time.
 
 But in fact, a request to server side may occur errors, if the request fail, you should not update views at that time. So the recommended way is: use `.save` to update data to server side, and use `.get` to get data after request success.
+
+2) transformers
+
+Use transformers to convert output data to your imagine construct. Each transformer function recieve a parameter `data` so you can modify it:
+
+```
+let transform1 = data => {
+  data.forEach((item, i) => item.name = i)
+}
+this.datamanager.register({
+  ...
+  transformers: [ transform1 ],
+  ...
+})
+```
+
+In fact, you can use `return` in transform function to replace original data:
+
+```
+function transform(data) {
+  ...
+  return newData
+}
+```
+
+So that is it easy to use your own data.
+
+3) middlewares
+
+Use middlewares to modify request information before each request is sent. 
+Global mode and single mode are both supported. You can use `use` api to apply a middleware to all requests in your application, or pass a middleware to options.middlewares when you use `.register` method.
+
+Now let's talk about a middleware function:
+
+```
+function mymiddleware(req, next) {}
+```
+
+`req` is the object which contains all information of a request. You can modify every in it.
+After everything is done, you MUST run `next()` to go into next middleware, or to run the real request.
+If you forget to run next(), your request will never be send. This is very important!
+
+So you can request another datasource before a certain one, like:
+
+```
+let myfun = (req, next) => {
+  this.datamanager.get('myOauth', {}, {}, true).then(authData => {
+    req.headers = merge({}, req.headers, {
+      'X-auth': authData,
+    })
+    next()
+  })
+}
+this.datamanger.register({
+  ...
+  middlewares: [ myfun ],
+})
+```
+
+Here I use force `get` to get a authData and use it as headers info to send my request.
+Order of middlewares: use(middleware) > constructor(options.middlewares) > .register(options.middlewares).
+Middlewares will not shared amoung different instances.
 
 ## MIT License
 
