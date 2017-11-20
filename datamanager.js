@@ -327,7 +327,9 @@ export default class DataManager {
       Promise.all(promises).then(() => {
         let requestURL = interpolate(url, params)
         options.method = options.method || type.toUpperCase()
+        // Notice: only json supported in datamanager, developer should convert other data type to json before send
         options.body = JSON.stringify(body ? merge({}, body, postData) : postData)
+        options.headers = merge({ 'Content-Type': 'application/json' }, options.headers || {})
         this._request(requestURL, options)
         .then(res => {
           resolve(res)
