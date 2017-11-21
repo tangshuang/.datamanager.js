@@ -290,6 +290,7 @@ export default class DataManager {
       throw new Error('Datasource ' + id + ' is not exists.')
     }
 
+    let settings = this.settings
     let { url, type, body } = datasource
     let requestId = hashstr(type + ':' + url + ':' + JSON.stringify(params) + (type.toUpperCase() === 'POST' && options.body ? ':' + JSON.stringify(options.body) : ''))
 
@@ -349,7 +350,7 @@ export default class DataManager {
         if (!pipe) {
           let _url = req.url
           delete req.url
-          this.settings.requester(_url, req).then(resolve).catch(reject)
+          return this.settings.requester(_url, req).then(resolve).catch(reject)
         }
         i ++
         return new Promise(next => { pipe(req, next) }).then(roll).catch(reject)
