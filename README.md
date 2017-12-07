@@ -120,7 +120,7 @@ Datasource id.
 
 **callback**
 
-Function. Has two paramaters: `callback(data, params)`. `data` it the new data after data changed, `params` is what you passed into `get` method.
+Function. Has one paramaters: `callback(params)`. `params` is what you passed into `get` method.
 
 **priority**
 
@@ -141,7 +141,9 @@ Don't be worry about several calls. If in a page has several components request 
 
 When the data is back from server side, all component will be notified.
 
-If `expires` is set, cache data will be used if not expired, if the cache data is expired, it will get `undefined` and request again.
+If `expires` is set, cache data will be used if not expired, if the cache data is expired, it will get last cache and request again (which will trigger callback).
+
+*Notice: you do not get the latest data request from server side, you just get latest data from managed cache.*
 
 **params**
 
@@ -156,14 +158,12 @@ let data = this.datamanager.get('myid', { user: 'lily', no: '1' })
 Request options, if you want to use 'POST' method, do like this:
 
 ```
-let data = await this.datamanager.get('myid', {}, { method: 'POST', body: { data1: 'xx' } })
+let data = this.datamanager.get('myid', {}, { method: 'POST', body: { data1: 'xx' } })
 ```
 
 If options.method is set, it will be used to cover datasource.type.
 
-However, your datasource.type given by `register` always cover this value. Read more from web api `fetch`.
-
-*Notice: you do not get the latest data request from server side, you just get latest data from managed cache.*
+Read more from web api `fetch` to learn about options.
 
 **force**
 
@@ -171,7 +171,7 @@ Boolean. Wether to request data directly from server side, without using local c
 If force is set to be 'true', you will get a promise, not the value:
 
 ```
-this.datamanager.save('myid', myData).then(async () => {
+this.datamanager.save('myid', {}, myData).then(async () => {
   let data = await this.datamanager.get('myid', {}, {}, true)
 })
 ```
@@ -216,6 +216,8 @@ export default class MyComponent {
 
 Array of functions. If you pass only one function, it is ok.
 
+To understand how `autorun` works, you should learn about `MobX`'s autorun first.
+
 ### autofree(funcs)
 
 Freed watchings which created by `autorun`. You must to do this before you destroy your component if you have called `autorun`, or you will face memory problem.
@@ -252,7 +254,7 @@ This method will return a promise, so you can use `then` or `catch` to do someth
 
 `.save` method has some rules:
 
-1. options.body will not work, instead of `data`
+1. options.body will not work, use `data` paramater instead
 2. options.method come before datasource.type
 3. several save requests will be merged
 
@@ -376,7 +378,7 @@ npm run start
 
 ## Tips
 
-1) why we provide a `dispatch` method to modify data in datamanager?
+1) why we don't provide a `dispatch` method to modify data in datamanager?
 
 Because data is static context, it means data should not be changed. 
 A situation about change data is that: when you save data to server side, you do not want to wait the reqeust finished, you want to update datamanager, and update views at the same time.
@@ -420,7 +422,7 @@ Now let's talk about a middleware function:
 function mymiddleware(req, next) {}
 ```
 
-`req` is the object which contains all information of a request. You can modify every in it.
+`req` is the object which contains all information of a request. You can modify everything in it.
 After everything is done, you MUST run `next()` to go into next middleware, or to run the real request.
 If you forget to run next(), your request will never be send. This is very important!
 
@@ -444,6 +446,13 @@ this.datamanger.register({
 Here I use force `get` to get a authData and use it as headers info to send my request.
 Order of middlewares: use(middleware) > constructor(options.middlewares) > .register(options.middlewares).
 Middlewares will not shared amoung different instances.
+
+4) deep cloned data
+
+When you use `.get` to get data from datamanager, you get a deep cloned data.
+It means your modifying this data will not affect other components' data.
+
+If you want to get same data structure for several components, you should share transformers amoung these components.
 
 ## MIT License
 
