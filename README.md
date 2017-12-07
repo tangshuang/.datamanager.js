@@ -101,9 +101,9 @@ Register a datasource in datamanager, notice, data source is shared with other c
   transformers: [() => {}], // [function], transform your data before getting data from data manager, you should pass a bound function or an arrow function if you use `this` in it.
   middlewares: [() => {}], // [function], transform each request before it is sent
   expires: 10*1000, // number, ms
-  immediate: {}, // object, if you pass a object to immediate option, data will be requested after register, 
-    // Notice, the object is `params` which is used by `.get` in fact. NEVER pass a string or some other types. 
-    // And always, there is no callback functions at this time, so the only purpose is initialize data more early.
+  immediate: false, // boolean, data will be requested after being registered immediately, 
+    // Notice, this datasource should have no interpolation params, it will use `this.get(id)` to request.
+    // And always, there is no callback functions at this time, so the only purpose is initialize data early.
 }
 ```
 
