@@ -1,6 +1,6 @@
 {
   "name": "datamanager.js",
-  "version": "0.0.20",
+  "version": "0.1.0",
   "description": "A frontend data sources management resolution among different components/application.",
   "main": "dist/datamanager.js",
   "scripts": {

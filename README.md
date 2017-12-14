@@ -134,6 +134,56 @@ If callback is undefined, all callbacks of this datasource will be removed.
 
 You must to do this before you destroy your component, or you will face memory problem.
 
+### request(id, params, options, force)
+
+Request data from datamanager. If data is not exists, it will request data from server side and return a Promise instance.
+Don't be worry about several calls. If in a page has several components request a url at the same time, only one request will be sent, and all of them will get the same Promise instance and will be notified by subscribed callback functions.
+
+When the data is back from server side, all component will be notified.
+
+If `expires` is set, cache data will be used if not expired, if the cache data is expired, it will request again which cost time (which will trigger callback).
+If not set, cache will always be used if exist.
+
+*Notice: you do not get the latest data request from server side, you just get latest data from managed cache.*
+
+**params**
+
+To replace interpolations in `url` option. For example, your data source url is 'https://xxx/{user}/{no}', you can do like this:
+
+```
+async function() {
+  let data = await this.datamanager.request('myid', { user: 'lily', no: '1' })
+}
+```
+
+Notice, here I use async/await, you can use .then.
+
+**options**
+
+Request options, if you want to use 'POST' method, do like this:
+
+```
+this.datamanager.get('myid', {}, { method: 'POST', body: { data1: 'xx' } }).then(data => {
+  ...
+})
+```
+
+If options.method is set, it will be used to cover datasource.type.
+
+Read more from web api `fetch` to learn about options.
+
+**force**
+
+Boolean. Wether to request data directly from server side, without using local cache:
+
+```
+this.datamanager.save('myid', {}, myData).then(async () => {
+  let data = await this.datamanager.request('myid', {}, {}, true)
+})
+```
+
+Notice: when you forcely request, subscribers will be fired after data come back, and local cache will be update too. So it is a good way to use force request when you want to refresh local cached data.
+
 ### get(id, params, options, force)
 
 Get data from datamanager. If data is not exists, it will request data from server side and return `undefined`.
@@ -177,6 +227,12 @@ this.datamanager.save('myid', {}, myData).then(async () => {
 ```
 
 Notice: when you forcely request, subscribers will be fired after data come back, and local cache will be update too. So it is a good way to use force request when you want to refresh local cached data.
+
+It seems the same between `get` and `request`. In fact, it is not, there are some differences.
+
+1. `get` can be used with `autorun`, `request` can't
+2. `get` will return undefined when there is no data in local cache, `request` will request from the server side waiting for a while
+3. `get` will use the last cache if the cache is expired, `request` will request latest data when expired
 
 ### autorun(funcs)
 
@@ -453,6 +509,57 @@ When you use `.get` to get data from datamanager, you get a deep cloned data.
 It means your modifying this data will not affect other components' data.
 
 If you want to get same data structure for several components, you should share transformers amoung these components.
+
+5) how to choose `get` or `request`
+
+Normally, `request` is more easy to understand. If you just want to use datamanager as a requester which has anti-shake feature amoung some requests during a short time, you should just choose `request`. And use `subscribe` to do something if you want to be triggered when data come back from server side when other components request the some datasource.
+
+```
+const ComponentA = (props) => ({
+  init(props) {
+    this.datamanager = new DataManager()
+    ...
+    // notified by other components, when another component request the some data source and get data, ComponentA will update
+    this.datamanager.subscribe(id, params => {
+      this.update()
+    })
+    // run by myself
+    this.update()
+  },
+  update() {
+    this.datamanager.request(id, params).then(data => {
+      this.data = data
+      this.render()
+    })
+  },
+  render() {},
+})
+```
+
+This is easy to understand. However, if you want to be more geek, use `get` and `autorun`. You should know more knowledge about moderm Obsever Mode implementation, for example Redux, Mobx, VueJS and so on.
+
+```
+const ComponentA = (props) => ({
+  init(props) {
+    this.datamanager = new DataManager()
+    ...
+    this.datamanager.autorun(this.update.bind(this))
+  },
+  update() {
+    let data = this.datamanager.get(id, params)
+    if (data === undefined) {
+      return
+    }
+    this.data = data
+    this.render()
+  },
+  render() {},
+})
+```
+
+However, `get` can be used with `subscribe`.
+
+They are in two different idea. So choose what you like or which you can easliy understand.
 
 ## MIT License
 

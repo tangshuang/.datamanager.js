@@ -202,6 +202,75 @@ export default class DataManager {
       this._deps = this._deps.filter(item => item.target !== fun)
     })
   }
+  request(id, params = {}, options = {}, force = false) {
+    let datasource = this.datasources[id]
+    if (!datasource) {
+      throw new Error('Datasource ' + id + ' is not exists.')
+    }
+
+    let { url, type, body, transformers, hash } = datasource
+    let requestURL = interpolate(url, params)
+    let requestId = getObjectHashCode({ type, url: requestURL, body: (type.toUpperCase() === 'POST' && options.body ? ':' + JSON.stringify(options.body) : '') })
+    let source = pool[hash]
+    let settings = this.settings
+
+    let use = data => {
+      return Promise.resolve(this._transform(deepclone(data), transformers))
+    }
+    let request = () => {
+      if (queue[requestId]) {
+        return queue[requestId]
+      }
+      options.method = options.method || type.toUpperCase()
+      options.body = options.body ? JSON.stringify(body ? merge({}, body, options.body) : options.body) : (body ? JSON.stringify(body) : undefined)
+      let mws = middlewares.concat(settings.middlewares || []).concat(datasource.middlewares || [])
+      let requester = this._request(requestURL, options, mws)
+        .then(res => {
+          queue[requestId] = null
+          return res.json()
+        }) // only json supported
+        .then(data => {
+          setDataItem(source, requestId, data)
+          let callbacks = source.callbacks
+          trigger(callbacks, params)
+          return use(data)
+        })
+        .catch(e => {
+          queue[requestId] = null
+          throw e
+        })
+      queue[requestId] = requester
+      return requester
+    }
+
+    // if force request data from server side
+    if (force) {
+      return request()
+    }
+    
+    let { store } = source
+    let item = store[requestId]
+    let expires = datasource.expires === undefined ? settings.expires : datasource.expires
+
+    // if there is no data in pool, request data now
+    if (!item) {
+      return request()
+    }
+
+    // if expires is not set, it means user want to use current cached data any way
+    if (!expires) {
+      return use(item.data)
+    }
+    
+    let { time, data } = item
+    // when data is not expired, use it
+    if (time + expires > Date.now()) {
+      return use(data)
+    }
+    
+    // when data is expired, return undefined and request new data again
+    return request()
+  }
   get(id, params = {}, options = {}, force = false) {
     let datasource = this.datasources[id]
     if (!datasource) {
@@ -232,20 +301,20 @@ export default class DataManager {
       options.body = options.body ? JSON.stringify(body ? merge({}, body, options.body) : options.body) : (body ? JSON.stringify(body) : undefined)
       let mws = middlewares.concat(settings.middlewares || []).concat(datasource.middlewares || [])
       return this._request(requestURL, options, mws)
-      .then(res => {
-        queue[requestId] = null
-        return res.json()
-      }) // only json supported
-      .then(data => {
-        setDataItem(source, requestId, data)
-        let callbacks = source.callbacks
-        trigger(callbacks, params)
-        return use(data)
-      })
-      .catch(e => {
-        queue[requestId] = null
-        throw e
-      })
+        .then(res => {
+          queue[requestId] = null
+          return res.json()
+        }) // only json supported
+        .then(data => {
+          setDataItem(source, requestId, data)
+          let callbacks = source.callbacks
+          trigger(callbacks, params)
+          return use(data)
+        })
+        .catch(e => {
+          queue[requestId] = null
+          throw e
+        })
     }
 
     // if force request data from server side
