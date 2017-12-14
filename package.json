@@ -1,6 +1,6 @@
 {
   "name": "datamanager.js",
-  "version": "0.0.19",
+  "version": "0.0.20",
   "description": "A frontend data sources management resolution among different components/application.",
   "main": "dist/datamanager.js",
   "scripts": {
@@ -23,7 +23,7 @@
   },
   "homepage": "https://github.com/tangshuang/datamanager.js#readme",
   "dependencies": {
-    "hash-string": "^1.0.0",
+    "hashcodeobject": "0.0.1",
     "interpolate": "^0.1.0",
     "lodash.clonedeep": "^4.5.0",
     "lodash.merge": "^4.6.0"

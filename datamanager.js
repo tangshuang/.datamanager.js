@@ -1,7 +1,7 @@
-import hashstr from 'hash-string'
 import deepclone from 'lodash.clonedeep'
 import merge from 'lodash.merge'
 import interpolate from 'interpolate'
+import { getObjectHashCode } from 'hashcodeobject'
 
 // for shared data source
 const pool = {}
@@ -96,7 +96,7 @@ export default class DataManager {
     let settings = this.settings
     let { host } = this.settings
     let requestURL = url.indexOf('http://') > -1 || url.indexOf('https://') > -1 ? url : host + url
-    let hash = hashstr(type + ':' + requestURL + (body ? ':' + JSON.stringify(body) : ''))
+    let hash = getObjectHashCode({ type, url: requestURL, body: body || '' })
     let source = {
       hash,
       url: requestURL,
@@ -217,7 +217,7 @@ export default class DataManager {
 
     let { url, type, body, transformers } = datasource
     let requestURL = interpolate(url, params)
-    let requestId = hashstr(type + ':' + requestURL + (type.toUpperCase() === 'POST' && options.body ? ':' + JSON.stringify(options.body) : ''))
+    let requestId = getObjectHashCode({ type, url: requestURL, body: (type.toUpperCase() === 'POST' && options.body ? ':' + JSON.stringify(options.body) : '') })
     let source = pool[datasource.hash]
     let settings = this.settings
     
@@ -291,7 +291,7 @@ export default class DataManager {
 
     let settings = this.settings
     let { url, type, body } = datasource
-    let requestId = hashstr(type + ':' + url + ':' + JSON.stringify(params) + (type.toUpperCase() === 'POST' && options.body ? ':' + JSON.stringify(options.body) : ''))
+    let requestId = getObjectHashCode({ type, url: requestURL, body: (type.toUpperCase() === 'POST' && options.body ? ':' + JSON.stringify(options.body) : '') })
 
     let transaction = transactions[requestId]
     let reset = () => {
