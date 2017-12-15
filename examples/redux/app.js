@@ -1,8 +1,9 @@
 import store from 'store'
 
-function render(container) {
+function render() {
   let users = store.getState()
   let html = ''
+  let container = document.querySelector('#container')
   users.forEach(item => html += `id:${item.id} name:${item.name}`)
   container.innerHTML = html
 }

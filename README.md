@@ -28,7 +28,7 @@ export default class MyComponent {
     // this.datamanager = new DataManager([ ... ])
     // or you can register several times
     // step 3: subscribe change callbacks
-    this.datamanager.subscribe('myid', params => { 
+    this.datamanager.subscribe('myid', (data, params) => { 
       // params is what you passed when you call .get(id, params)
       // you can use params to determine whether to go on,
       // for example:
@@ -118,9 +118,9 @@ Notice, when data changed (new data requested from server side), all callback fu
 
 Datasource id.
 
-**callback**
+**callback(data, params)**
 
-Function. Has one paramaters: `callback(params)`. `params` is what you passed into `get` method.
+Function. Has one paramaters: `callback(data, params)`. `params` is what you passed into `get` method.
 
 **priority**
 
@@ -520,7 +520,7 @@ const ComponentA = (props) => ({
     this.datamanager = new DataManager()
     ...
     // notified by other components, when another component request the some data source and get data, ComponentA will update
-    this.datamanager.subscribe(id, params => {
+    this.datamanager.subscribe(id, () => {
       this.update()
     })
     // run by myself

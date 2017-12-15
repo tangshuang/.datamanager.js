@@ -232,7 +232,7 @@ export default class DataManager {
         .then(data => {
           setDataItem(source, requestId, data)
           let callbacks = source.callbacks
-          trigger(callbacks, params)
+          trigger(callbacks, data, params)
           return use(data)
         })
         .catch(e => {
@@ -308,7 +308,7 @@ export default class DataManager {
         .then(data => {
           setDataItem(source, requestId, data)
           let callbacks = source.callbacks
-          trigger(callbacks, params)
+          trigger(callbacks, data, params)
           return use(data)
         })
         .catch(e => {
