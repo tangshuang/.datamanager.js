@@ -1,15 +1,10 @@
 import DataManager from '../datamanager'
 
 export default class ComponentA {
-  constructor(container) {
+  constructor(container, DataSources) {
     this.container = container
-    this.data = new DataManager([
-      {
-        id: 'studentsA',
-        url: '/students',
-        type: 'GET',
-      },
-    ])
+    this.data = new DataManager({ id: 'A' })
+    this.data.register(Object.assign({ id: 'studentsA' }, DataSources.STUDENTS))
     this.data.autorun(this.render.bind(this))
   }
   render() {

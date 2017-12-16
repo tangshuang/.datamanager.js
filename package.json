@@ -1,11 +1,11 @@
 {
   "name": "datamanager.js",
-  "version": "0.1.1",
+  "version": "0.2.0",
   "description": "A frontend data sources management resolution among different components/application.",
   "main": "dist/datamanager.js",
   "scripts": {
     "prepublishOnly": "npm run build",
-    "start": "webpack --config ./examples/webpack.config.js && node ./examples/server.js",
+    "demo": "nodemon ./examples/server.js --watch ./examples/server.js",
     "build": "webpack"
   },
   "repository": {
@@ -23,6 +23,7 @@
   },
   "homepage": "https://github.com/tangshuang/datamanager.js#readme",
   "dependencies": {
+    "axios": "^0.17.1",
     "hashcodeobject": "0.0.1",
     "interpolate": "^0.1.0",
     "lodash.clonedeep": "^4.5.0",
@@ -32,9 +33,12 @@
     "babel-core": "^6.26.0",
     "babel-loader": "^7.1.2",
     "babel-preset-env": "^1.6.1",
+    "body-parser": "^1.18.2",
     "express": "^4.16.2",
+    "nodemon": "^1.13.3",
     "open": "0.0.5",
     "webpack": "^3.8.1",
+    "webpack-dev-middleware": "^2.0.1",
     "webpack-node-externals": "^1.6.0"
   }
 }

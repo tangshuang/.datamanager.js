@@ -2,19 +2,20 @@ import deepclone from 'lodash.clonedeep'
 import merge from 'lodash.merge'
 import interpolate from 'interpolate'
 import { getObjectHashCode } from 'hashcodeobject'
+import axios from 'axios'
 
-// for shared data source
+// for cache
 const pool = {}
-// for .get requests
 const queue = {}
-// for .save requests
 const transactions = {}
 
+// for request intercept
 const middlewares = []
+const modems = []
+
 const configs = {
-  requester: fetch.bind(window),
   host: '',
-  expires: 10*1000, 
+  expires: 10, 
   debug: false,
 }
 
@@ -24,6 +25,10 @@ export function config(cfgs = {}) {
 
 export function use(mw) {
   middlewares.push(mw)
+}
+
+export function adapt(modem) {
+  modems.push(modem)
 }
 
 function addDataSource(source) {
@@ -52,6 +57,7 @@ function setDataItem(source, requestId, data) {
   item.time = time
   item.data = data
 }
+
 function trigger(callbacks, ...args) {
   callbacks.sort((a, b) => {
     if (a.priority > b.priority) {
@@ -69,6 +75,37 @@ function trigger(callbacks, ...args) {
   })
 }
 
+function transform(data, transformers) {
+  if (!transformers || !transformers.length) {
+    return data
+  }
+  let result = data
+  transformers.forEach(transformer => {
+    result = transformer(result) || result
+  })
+  return result
+}
+
+function intercept(req, middlewares) {
+  return new Promise((resolve, reject) => {
+    let i = 0
+    let roll = () => {
+      let pipe = middlewares[i]
+      if (!pipe) {
+        resolve()
+        return
+      }
+      i ++
+      return new Promise((next, stop) => { pipe(req, next, stop) }).then(roll).catch(reject)
+    }
+    roll()
+  })
+}
+
+function demodulate(res, modems) {
+  return intercept(res, modems)
+}
+
 function isEqual(obj1, obj2) {
   if (Object.keys(obj1).length == 0 && Object.keys(obj2).length === 0) {
     return true
@@ -77,13 +114,10 @@ function isEqual(obj1, obj2) {
 }
 
 export default class DataManager {
-  constructor(datasources = [], settings = {}) {
+  constructor(settings = {}) {
     this.datasources = {}
-    this.id = 'datamanager.' + Date.now() + '.' + parseInt(Math.random() * 10000)
-
+    this.id = settings.id || 'datamanager.' + Date.now() + '.' + parseInt(Math.random() * 10000)
     this.settings = merge({}, configs, settings)
-
-    datasources.forEach(datasource => this.register(datasource))
     this._deps = []
   }
   _debug(...args) {
@@ -91,26 +125,32 @@ export default class DataManager {
       console.log(this.id, ...args)
     }
   }
-  register(datasource) {
-    let { id, url, type, body, transformers, immediate, middlewares, expires } = datasource
-    let settings = this.settings
-    let { host } = this.settings
-    let requestURL = url.indexOf('http://') > -1 || url.indexOf('https://') > -1 ? url : host + url
-    let hash = getObjectHashCode({ type, url: requestURL, body: body || '' })
-    let source = {
-      hash,
-      url: requestURL,
-      type,
-      body,
+  register(datasources) {
+    if (!Array.isArray(datasources)) {
+      datasources = [ datasources ]
     }
 
-    addDataSource(source)
-    this.datasources[id] = merge({}, source, { transformers, middlewares, expires })
+    datasources.forEach(datasource => {
+      let { id, url, type, postData, transformers, immediate, middlewares, modems, expires } = datasource
+      let settings = this.settings
+      let { host } = this.settings
+      let requestURL = url.indexOf('http://') > -1 || url.indexOf('https://') > -1 ? url : host + url
+      let hash = getObjectHashCode({ type, url: requestURL, postData })
+      let source = {
+        hash,
+        url: requestURL,
+        type,
+        postData,
+      }
+  
+      addDataSource(source)
+      this.datasources[id] = merge({}, source, { transformers, middlewares, modems, expires })
+  
+      if (immediate) {
+        this.request(id)
+      }
+    })
 
-    if (immediate) {
-      this.get(id)
-    }
-    
     return this
   }
   subscribe(id, callback, priority = 10) {
@@ -167,7 +207,7 @@ export default class DataManager {
       return false
     }
 
-    let callback = params => {
+    let callback = (data, params) => {
       if (isEqual(_dep.params, params)) {
         this._wrapDep(_dep.target)
       }
@@ -202,43 +242,67 @@ export default class DataManager {
       this._deps = this._deps.filter(item => item.target !== fun)
     })
   }
-  request(id, params = {}, options = {}, force = false) {
+  _create(id, params, options, force, usePromise, collectDependences) {
     let datasource = this.datasources[id]
     if (!datasource) {
       throw new Error('Datasource ' + id + ' is not exists.')
     }
 
-    let { url, type, body, transformers, hash } = datasource
-    let requestURL = interpolate(url, params)
-    let requestId = getObjectHashCode({ type, url: requestURL, body: (type.toUpperCase() === 'POST' && options.body ? ':' + JSON.stringify(options.body) : '') })
-    let source = pool[hash]
-    let settings = this.settings
+    // add dependences
+    if (collectDependences && this._dep && this._dep.target) {
+      this._dep.id = id
+      this._dep.params = params
+      this._addDep()
+    }
 
-    let use = data => {
-      return Promise.resolve(this._transform(deepclone(data), transformers))
+    let { url, type, transformers } = datasource
+    let requestURL = interpolate(url, params)
+    let requestId = getObjectHashCode({ type, url: requestURL, postData: options.data })
+    let source = pool[datasource.hash]
+    let settings = this.settings
+    
+    let transfer = data => {
+      return transform(deepclone(data), transformers)
     }
     let request = () => {
       if (queue[requestId]) {
         return queue[requestId]
       }
-      options.method = options.method || type.toUpperCase()
-      options.body = options.body ? JSON.stringify(body ? merge({}, body, options.body) : options.body) : (body ? JSON.stringify(body) : undefined)
-      let mws = middlewares.concat(settings.middlewares || []).concat(datasource.middlewares || [])
-      let requester = this._request(requestURL, options, mws)
+
+      let req = merge({}, options)
+      let postData = datasource.postData
+      req.url = requestURL
+      req.method = req.method || type.toUpperCase()
+      req.data = merge({}, postData, req.data)
+
+      let requester = intercept(req, middlewares.concat(settings.middlewares || []).concat(datasource.middlewares || []))
+      .then(() => {
+        this._debug('Request:', req)
+        return axios(req)
         .then(res => {
           queue[requestId] = null
-          return res.json()
-        }) // only json supported
-        .then(data => {
-          setDataItem(source, requestId, data)
-          let callbacks = source.callbacks
-          trigger(callbacks, data, params)
-          return use(data)
+
+          return demodulate(res, modems.concat(settings.modems || []).concat(datasource.modems || []))
+          .then(() => {
+            this._debug('Response:', res)
+            let data = res.data
+            setDataItem(source, requestId, data)
+            
+            let callbacks = source.callbacks
+            trigger(callbacks, data, params)
+            
+            return transfer(data)
+          })
+          .catch(e => {
+            throw e
+          })
         })
         .catch(e => {
           queue[requestId] = null
           throw e
-        })
+        })  
+      })
+      
       queue[requestId] = requester
       return requester
     }
@@ -254,103 +318,35 @@ export default class DataManager {
 
     // if there is no data in pool, request data now
     if (!item) {
-      return request()
+      let requester = request()
+      if (usePromise) {
+        return requester
+      }
+      return undefined
     }
 
     // if expires is not set, it means user want to use current cached data any way
-    if (!expires) {
-      return use(item.data)
+    // when data cache is not expired, use it
+    if (!expires || item.time + expires > Date.now()) {
+      let output = transfer(item.data)
+      if (usePromise) {
+        return Promise.resolve(output)
+      }
+      return output
     }
-    
-    let { time, data } = item
-    // when data is not expired, use it
-    if (time + expires > Date.now()) {
-      return use(data)
+
+    let requester = request()
+    if (usePromise) {
+      return requester
     }
-    
     // when data is expired, return undefined and request new data again
-    return request()
+    return transfer(item.data)
+  }
+  request(id, params = {}, options = {}, force = false) {
+    return this._create(id, params, options, force, true, false)
   }
   get(id, params = {}, options = {}, force = false) {
-    let datasource = this.datasources[id]
-    if (!datasource) {
-      throw new Error('Datasource ' + id + ' is not exists.')
-    }
-
-    // add dependences
-    if (this._dep && this._dep.target) {
-      this._dep.id = id
-      this._dep.params = params
-      this._addDep()
-    }
-
-    let { url, type, body, transformers } = datasource
-    let requestURL = interpolate(url, params)
-    let requestId = getObjectHashCode({ type, url: requestURL, body: (type.toUpperCase() === 'POST' && options.body ? ':' + JSON.stringify(options.body) : '') })
-    let source = pool[datasource.hash]
-    let settings = this.settings
-    
-    let use = data => {
-      return this._transform(deepclone(data), transformers)
-    }
-    let request = () => {
-      if (queue[requestId]) {
-        return queue[requestId]
-      }
-      options.method = options.method || type.toUpperCase()
-      options.body = options.body ? JSON.stringify(body ? merge({}, body, options.body) : options.body) : (body ? JSON.stringify(body) : undefined)
-      let mws = middlewares.concat(settings.middlewares || []).concat(datasource.middlewares || [])
-      return this._request(requestURL, options, mws)
-        .then(res => {
-          queue[requestId] = null
-          return res.json()
-        }) // only json supported
-        .then(data => {
-          setDataItem(source, requestId, data)
-          let callbacks = source.callbacks
-          trigger(callbacks, data, params)
-          return use(data)
-        })
-        .catch(e => {
-          queue[requestId] = null
-          throw e
-        })
-    }
-
-    // if force request data from server side
-    if (force) {
-      return request()
-    }
-    
-    let { store } = source
-    let item = store[requestId]
-    let expires = datasource.expires === undefined ? settings.expires : datasource.expires
-
-    // if there is no data in pool, request data now
-    if (!item) {
-      queue[requestId] = request()
-    }
-
-    // if expires is not set, it means user want to use current cached data any way
-    if (!expires) {
-      return item ? use(item.data) : undefined
-    }
-    else {
-      // if data is not in our store now
-      if (!item) {
-        return undefined
-      }
-
-      let { time, data } = item
-      // when data is not expired, use it
-      if (time + expires > Date.now()) {
-        return use(data)
-      }
-
-      // when data is expired, return undefined and request new data again
-      queue[requestId] = request()
-      return use(item.data)
-    }
+    return this._create(id, params, options, force, false, true)
   }
   save(id, params = {}, data, options = {}) {
     let datasource = this.datasources[id]
@@ -359,8 +355,9 @@ export default class DataManager {
     }
 
     let settings = this.settings
-    let { url, type, body } = datasource
-    let requestId = getObjectHashCode({ type, url: requestURL, body: (type.toUpperCase() === 'POST' && options.body ? ':' + JSON.stringify(options.body) : '') })
+    let { url, type } = datasource
+    let requestURL = interpolate(url, params)
+    let requestId = getObjectHashCode({ type, url: requestURL, postData: options.data })
 
     let transaction = transactions[requestId]
     let reset = () => {
@@ -369,17 +366,15 @@ export default class DataManager {
         promises: [],
         data: {},
         timer: null,
+        processing: null,
       }
     }
     if (!transaction) {
       transaction = transactions[requestId] = reset()
     }
 
-    let { resolves, promises, timer } = transaction
-    let d = transaction.data
-    let postData = merge(d, data)
-
-    transaction.data = postData
+    let { resolves, promises, timer, processing } = transaction
+    transaction.data = merge({}, transaction.data, options.data, data)
     promises.push(new Promise(resolve => resolves.push(resolve)))
 
     if (timer) {
@@ -391,49 +386,37 @@ export default class DataManager {
       transactions[requestId] = reset()
     }, 10)
 
-    return new Promise((resolve, reject) => {
+    if (processing) {
+      return processing
+    }
+
+    transaction.processing = new Promise((resolve, reject) => {
       Promise.all(promises)
+      .then(() => {
+        let req = merge({}, options)
+        req.url = requestURL
+        req.method = req.method || type
+        req.data = merge({}, datasource.postData, transaction.data)
+
+        intercept(req, middlewares.concat(settings.middlewares || []).concat(datasource.middlewares || []))
         .then(() => {
-          let requestURL = interpolate(url, params)
-          options.method = options.method || type.toUpperCase()
-          // Notice: only json supported in datamanager, developer should convert other data type to json before send
-          options.body = JSON.stringify(body ? merge({}, body, postData) : postData)
-          options.headers = merge({ 'Content-Type': 'application/json' }, options.headers || {})
-          let mws = middlewares.concat(settings.middlewares || []).concat(datasource.middlewares || [])
-          this._request(requestURL, options, mws)
-            .then(resolve)
+          this._debug('Request:', req)
+          axios(req)
+          .then(res => {
+            demodulate(res, modems.concat(settings.modems || []).concat(datasource.modems || []))
+            .then(() => {
+              this._debug('Response:', res)
+              resolve(res)
+            })
             .catch(reject)
+          })
+          .catch(reject)
         })
         .catch(reject)
+      })
+      .catch(reject)
     })
-  }
-  _request(url, options, middlewares) {
-    let req = merge({}, options)
-    req.url = url
-    
-    return new Promise((resolve, reject) => {
-      let i = 0
-      let roll = () => {
-        let pipe = middlewares[i]
-        if (!pipe) {
-          let _url = req.url
-          delete req.url
-          return this.settings.requester(_url, req).then(resolve).catch(reject)
-        }
-        i ++
-        return new Promise(next => { pipe(req, next) }).then(roll).catch(reject)
-      }
-      roll()
-    })
-  }
-  _transform(data, transformers) {
-    if (!transformers || !transformers.length) {
-      return data
-    }
-    let result = data
-    transformers.forEach(transformer => {
-      result = transformer(result) || result
-    })
-    return result
+
+    return transaction.processing
   }
 }

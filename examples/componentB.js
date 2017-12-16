@@ -1,16 +1,10 @@
 import DataManager from '../datamanager'
 
 export default class ComponentA {
-  constructor(container) {
+  constructor(container, DataSources) {
     this.container = container
-    let datasources = [
-      {
-        id: 'studentsB',
-        url: '/students',
-        type: 'GET',
-      },
-    ]
-    this.data = new DataManager(datasources, { debug: true, expires: 1000 })
+    this.data = new DataManager({ id: 'B', debug: true })
+    this.data.register(Object.assign({ id: 'studentsB' }, DataSources.STUDENTS))
     this.data.autorun(this.render.bind(this))
   }
   render() {
@@ -33,5 +27,9 @@ export default class ComponentA {
       </table>
     `
     document.querySelector(this.container).innerHTML = html
+  }
+  save() {
+    this.data.save('studentsB', {}, { testdata1: 'this is 1' }, { method: 'post' })
+    this.data.save('studentsB', {}, { testdata2: 'another msg' }, { method: 'post' })
   }
 }

@@ -16,41 +16,41 @@ import DataManager from 'datamanager.js'
 export default class MyComponent {
   constructor() {
     // step 1: initialize a instance
-    this.datamanager = new DataManager()
+    this.datamanager = new DataManager({ host: 'http://localhost:3000' })
     // step 2: register datasources
     this.datamanager.register({
       id: 'myid',
-      url: 'http://xxx/{id}',
-      transformers: [data => { return data }],
-      expires: 60*1000, // 1 min
+      url: '/users/{id}',
+      expires: 60*1000, // 1 min cache
     })
-    // if you want to register several datasource, you can pass an array into constructor like this:
-    // this.datamanager = new DataManager([ ... ])
-    // or you can register several times
     // step 3: subscribe change callbacks
     this.datamanager.subscribe('myid', (data, params) => { 
-      // params is what you passed when you call .get(id, params)
+      // params is what you passed when you call .get(id, params) or .request(id, params)
       // you can use params to determine whether to go on,
       // for example:
       if (params.id === '111') {
         this.render()
       }
     })
-    // you can subscribe several callback functions here
-    // then render your ui view with data
+    
     this.render()
   }
   render() {
     // step 4: use data from datamanager
     let data = this.datamanager.get('myid', { id: '111' })
-    // here I use id='111', so that the callback function will be trigger
     // step 5: create a condition to stop program if data is not exists
     if (data === undefined) {
       return
       // don't be worry, when you call .get, data manager will request data from server side,
       // after data back, subscribed callback function will run, and .render will be call again
     }
-    // do your self ui action with data
+    // you code here using data
+    ...
+
+    // step 4: or use .request, not .get
+    // this.datamanager.request('myid', { id: '111' }).then(data => {
+    //    your code here using data
+    // })
   }
 }
 ```
@@ -59,13 +59,9 @@ Look this code, when the component initialize first time, render method will do 
 
 ## Methods
 
-### constructor(datasources, options)
+### constructor(options)
 
 To new a datamanager instance.
-
-**datasources**
-
-*Array*. Read more in `register`.
 
 **options**
 
@@ -75,15 +71,18 @@ To new a datamanager instance.
   expires: 10*1000, // 10ms cached
   debug: false, // console.log some internal information, now no use
   requester: fetch, // function(url, options), use which library to send request, you can use axios to create a function, default using `fetch`
-  middlewares: [], // [function(options, next)], middlewares to modify request options before send, read more from `middleware` api.
+  middlewares: [], // [function(req, next, stop)], functions to modify request options before send
+  modems: [], // [function(res, next, stop)], functions to modify response when request success
 }
 ```
 
 Read more from following `config` api.
 
-### register(datasource)
+### register(datasources)
 
-Register a datasource in datamanager, notice, data source is shared with other components which use datamanager, however, transformers are not shared.
+Register datasources in datamanager, notice, data is shared with other components which use datamanager, however, transformers are not shared.
+
+It is ok if you pass only one datasource here.
 
 **datasource**
 
@@ -97,17 +96,18 @@ Register a datasource in datamanager, notice, data source is shared with other c
     // and when you cal `.get` method, you can pass params in the second paramater,
     // if you pass relative url, it will be connected with options.host
   type: '', // string, 'GET' or 'POST', default request method to use. default is 'GET'
-  body: {}, // if your `type` is 'POST', you may want to bring with some post data when you request, set these default post data here
+  postData: {}, // if your `type` is 'POST' or 'PUT', you may want to bring with some post data when you request, set these default post data here
   transformers: [() => {}], // [function], transform your data before getting data from data manager, you should pass a bound function or an arrow function if you use `this` in it.
   middlewares: [() => {}], // [function], transform each request before it is sent
+  modems: [], // [function(res, next, stop)], functions to modify response when request success
   expires: 10*1000, // number, ms
   immediate: false, // boolean, data will be requested after being registered immediately, 
-    // Notice, this datasource should have no interpolation params, it will use `this.get(id)` to request.
+    // Notice, this datasource should have no interpolation params, it will use `this.request(id)` to request.
     // And always, there is no callback functions at this time, so the only purpose is initialize data early.
 }
 ```
 
-When you `.get` or `.save` data, this datasource info will be used as basic information. However `options` which is passed to .get and .save will be merged into this information, and the final request information is a merged object.
+When you `.get` `.request` or `.save` data, this datasource info will be used as basic information. However `options` which is passed to .get, .request and .save will be merged into this information, and the final request information is a merged object.
 
 ### subscribe(id, callback, priority)
 
@@ -226,7 +226,7 @@ this.datamanager.save('myid', {}, myData).then(async () => {
 })
 ```
 
-Notice: when you forcely request, subscribers will be fired after data come back, and local cache will be update too. So it is a good way to use force request when you want to refresh local cached data.
+Notice: when you forcely request, subscribers will be fired after data come back, and local cache will be update too. So it is a good way to use force request when you want to refresh local cached data. But the return value is the latest cache, and the next time when you .get, you will get the new data.
 
 It seems the same between `get` and `request`. In fact, it is not, there are some differences.
 
@@ -310,7 +310,7 @@ This method will return a promise, so you can use `then` or `catch` to do someth
 
 `.save` method has some rules:
 
-1. options.body will not work, use `data` paramater instead
+1. options.data will work, but it will be used for identination of the request, so use `data` paramater instead
 2. options.method come before datasource.type
 3. several save requests will be merged
 
@@ -373,7 +373,7 @@ It is useful to do authentication.
 A middleware is a function like:
 
 ```
-function(req, next) {
+function(req, next, stop) {
   // req.url = ...
   // req.headers = {
   //   "Content-Type": "application/json",
@@ -382,7 +382,22 @@ function(req, next) {
 }
 ```
 
-NOTICE: In your middleware, you MUST run `next()` to pass `req` to next middleware, if you do not run `next()`, the request will NEVER be sent.
+NOTICE: In your middleware, you MUST run `next()` to pass `req` to next middleware, if you do not run `next()`, the request will NEVER be sent. `stop()` will forbide the request be sent out.
+
+### adapt(modem)
+
+To modify response from server side, you should use `modems`. A modem function should like:
+
+```
+function(res, next, stop) {
+  if (res.data.status >= 300) {
+    stop()
+  }
+  next()
+}
+```
+
+This is a easy for you to check the response is what you expect.
 
 ## Shared datasource
 
@@ -429,7 +444,7 @@ datamanager will help you to merge these requests, only once request happens.
 Run a demo on your local machine:
 
 ```
-npm run start
+npm run demo
 ```
 
 ## Tips
