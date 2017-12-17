@@ -93,7 +93,7 @@ It is ok if you pass only one datasource here.
   id: '', // string, identifation of this datasource, can be only called by current instance
   url: '', // string, url to request data, 
     // you can use interpolations in it, i.e. 'https://xxx/{user_name}/{id}', 
-    // and when you cal `.get` method, you can pass params in the second paramater,
+    // and when you cal `.get` method, you can pass params in the second parameter,
     // if you pass relative url, it will be connected with options.host
   type: '', // string, 'GET' or 'POST', default request method to use. default is 'GET'
   postData: {}, // if your `type` is 'POST' or 'PUT', you may want to bring with some post data when you request, set these default post data here
@@ -118,9 +118,21 @@ Notice, when data changed (new data requested from server side), all callback fu
 
 Datasource id.
 
-**callback(data, params)**
+**callback(data, params, options)**
 
-Function. Has one paramaters: `callback(data, params)`. `params` is what you passed into `get` method.
+Function. `params` and `options` are used to check whether the notify should affect.
+
+```
+this.datamanager.subscribe('myid', (data, params, options) => {
+  if (params.userId === 112 && options.data && options.data.taskId === 'xxx') {
+    console.log(data)
+  }
+})
+
+this.datamanager.request('myid', { userId: 112 }, { data: { taskId: 'xxx' } })
+``` 
+
+Why it is so complex? Because a datasource may have url interpolations, or have different request options. Different request should have different response plan.
 
 **priority**
 
@@ -163,14 +175,14 @@ Notice, here I use async/await, you can use .then.
 Request options, if you want to use 'POST' method, do like this:
 
 ```
-this.datamanager.get('myid', {}, { method: 'POST', body: { data1: 'xx' } }).then(data => {
+this.datamanager.get('myid', {}, { method: 'POST', data: { data1: 'xx' } }).then(data => {
   ...
 })
 ```
 
 If options.method is set, it will be used to cover datasource.type.
 
-Read more from web api `fetch` to learn about options.
+We use *axios* as request engine, the options is follow the rules of aixos. So if you want to know more about this, you should read more about [axios](https://github.com/axios/axios).
 
 **force**
 
@@ -213,17 +225,16 @@ let data = this.datamanager.get('myid', {}, { method: 'POST', body: { data1: 'xx
 
 If options.method is set, it will be used to cover datasource.type.
 
-Read more from web api `fetch` to learn about options.
+Follow axios' config rules.
 
 **force**
 
-Boolean. Wether to request data directly from server side, without using local cache.
-If force is set to be 'true', you will get a promise, not the value:
+Boolean. Wether to request data immediately.
+If force is set to be 'true', you will get current cached data, but a new request will be sent to get latest data:
 
 ```
-this.datamanager.save('myid', {}, myData).then(async () => {
-  let data = await this.datamanager.get('myid', {}, {}, true)
-})
+this.datamanager.save('myid', {}, myData)
+let data = this.datamanager.get('myid', {}, {}, true) // get current cache, but a request will be sent
 ```
 
 Notice: when you forcely request, subscribers will be fired after data come back, and local cache will be update too. So it is a good way to use force request when you want to refresh local cached data. But the return value is the latest cache, and the next time when you .get, you will get the new data.
@@ -232,7 +243,7 @@ It seems the same between `get` and `request`. In fact, it is not, there are som
 
 1. `get` can be used with `autorun`, `request` can't
 2. `get` will return undefined when there is no data in local cache, `request` will request from the server side waiting for a while
-3. `get` will use the last cache if the cache is expired, `request` will request latest data when expired
+3. `get` will use the last cache if the cache is expired, or use force mode, `request` will send a request waiting util the data back
 
 ### autorun(funcs)
 
@@ -268,11 +279,13 @@ export default class MyComponent {
 }
 ```
 
+Notice: `autorun` can be only used with `get`.
+
 **funcs**
 
 Array of functions. If you pass only one function, it is ok.
 
-To understand how `autorun` works, you should learn about `MobX`'s autorun first.
+To understand how `autorun` works, you should learn about [mobx](https://github.com/mobxjs/mobx)'s autorun first.
 
 ### autofree(funcs)
 
@@ -286,7 +299,7 @@ To save data to server side, I provide a save method. You can use it like put/po
 this.datamanger.save('myId', { userId: '1233' }, { name: 'lily', age: 10 })
 ```
 
-Notice: save method will not update the local cached data, local cached data can only be updated by `.get` method after request from server side. So when you use `.save`, you should  always `.get` again in `.then`.
+Notice: save method will not update the local cached data, local cached data can only be updated by `get`/`request` method after request from server side. Callbacks will not be triggered. So when you use `.save`, you should  always `get`/`request` again in `.then` to get latest data.
 
 **id**
 
@@ -302,7 +315,7 @@ post data.
 
 **options**
 
-`fetch` options.
+Axios config.
 
 **@return**
 
@@ -310,7 +323,7 @@ This method will return a promise, so you can use `then` or `catch` to do someth
 
 `.save` method has some rules:
 
-1. options.data will work, but it will be used for identination of the request, so use `data` paramater instead
+1. options.data will work, it will be merged with `data` parameter, but not recommended, you should always use `data` parameter
 2. options.method come before datasource.type
 3. several save requests will be merged
 

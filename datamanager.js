@@ -200,15 +200,14 @@ export default class DataManager {
     delete this._dep
   }
   _addDep() {
-    let _dep = this._dep
-    let { id, params, target } = _dep
+    let dep = this._dep
 
-    if (this._deps.find(item => item.id === id && isEqual(item.params, params) && item.target === target)) {
+    if (this._deps.find(item => item.id === dep.id && isEqual(item.params, dep.params) && isEqual(item.options, dep.options) && item.target === dep.target)) {
       return false
     }
 
-    let callback = (data, params) => {
-      if (isEqual(_dep.params, params)) {
+    let callback = (data, params, options) => {
+      if (isEqual(dep.params, params) && isEqual(dep.options, options)) {
         this._wrapDep(_dep.target)
       }
     }
@@ -252,6 +251,7 @@ export default class DataManager {
     if (collectDependences && this._dep && this._dep.target) {
       this._dep.id = id
       this._dep.params = params
+      this._dep.options = options
       this._addDep()
     }
 
@@ -270,10 +270,9 @@ export default class DataManager {
       }
 
       let req = merge({}, options)
-      let postData = datasource.postData
       req.url = requestURL
       req.method = req.method || type.toUpperCase()
-      req.data = merge({}, postData, req.data)
+      req.data = merge({}, datasource.postData, req.data)
 
       let requester = intercept(req, middlewares.concat(settings.middlewares || []).concat(datasource.middlewares || []))
       .then(() => {
@@ -289,7 +288,7 @@ export default class DataManager {
             setDataItem(source, requestId, data)
             
             let callbacks = source.callbacks
-            trigger(callbacks, data, params)
+            trigger(callbacks, data, params, options)
             
             return transfer(data)
           })
@@ -306,11 +305,6 @@ export default class DataManager {
       queue[requestId] = requester
       return requester
     }
-
-    // if force request data from server side
-    if (force) {
-      return request()
-    }
     
     let { store } = source
     let item = store[requestId]
@@ -323,6 +317,15 @@ export default class DataManager {
         return requester
       }
       return undefined
+    }
+
+    // if force request data from server side
+    if (force) {
+      let requester = request()
+      if (usePromise) {
+        return requester
+      }
+      return transfer(item.data)
     }
 
     // if expires is not set, it means user want to use current cached data any way
