@@ -10,8 +10,8 @@ const queue = {}
 const transactions = {}
 
 // for request intercept
-const middlewares = []
-const modems = []
+const interceptors = []
+const adapters = []
 
 const configs = {
   host: '',
@@ -23,12 +23,12 @@ export function config(cfgs = {}) {
   merge(configs, cfgs)
 }
 
-export function use(mw) {
-  middlewares.push(mw)
+export function intercept(interceptor) {
+  interceptors.push(interceptor)
 }
 
-export function adapt(modem) {
-  modems.push(modem)
+export function adapt(adapter) {
+  adapters.push(adapter)
 }
 
 function addDataSource(source) {
@@ -86,11 +86,11 @@ function transform(data, transformers) {
   return result
 }
 
-function intercept(req, middlewares) {
+function intercepting(req, interceptors) {
   return new Promise((resolve, reject) => {
     let i = 0
     let roll = () => {
-      let pipe = middlewares[i]
+      let pipe = interceptors[i]
       if (!pipe) {
         resolve()
         return
@@ -102,8 +102,8 @@ function intercept(req, middlewares) {
   })
 }
 
-function demodulate(res, modems) {
-  return intercept(res, modems)
+function adapting(res, adapters) {
+  return intercepting(res, adapters)
 }
 
 function isEqual(obj1, obj2) {
@@ -131,7 +131,7 @@ export default class DataManager {
     }
 
     datasources.forEach(datasource => {
-      let { id, url, type, postData, transformers, immediate, middlewares, modems, expires } = datasource
+      let { id, url, type, postData, transformers, immediate, interceptors, adapters, expires } = datasource
       let settings = this.settings
       let { host } = this.settings
       let requestURL = url.indexOf('http://') > -1 || url.indexOf('https://') > -1 ? url : host + url
@@ -144,7 +144,7 @@ export default class DataManager {
       }
   
       addDataSource(source)
-      this.datasources[id] = merge({}, source, { transformers, middlewares, modems, expires })
+      this.datasources[id] = merge({}, source, { transformers, interceptors, adapters, expires })
   
       if (immediate) {
         this.request(id)
@@ -208,16 +208,12 @@ export default class DataManager {
 
     let callback = (data, params, options) => {
       if (isEqual(dep.params, params) && isEqual(dep.options, options)) {
-        this._wrapDep(_dep.target)
+        this._wrapDep(dep.target)
       }
     }
-    this._deps.push({
-      target,
-      id,
-      params,
-      callback,
-    })
-    this.subscribe(id, callback)
+
+    this._deps.push(dep)
+    this.subscribe(dep.id, callback)
 
     return true
   }
@@ -274,14 +270,14 @@ export default class DataManager {
       req.method = req.method || type.toUpperCase()
       req.data = merge({}, datasource.postData, req.data)
 
-      let requester = intercept(req, middlewares.concat(settings.middlewares || []).concat(datasource.middlewares || []))
+      let requester = intercepting(req, interceptors.concat(settings.interceptors || []).concat(datasource.interceptors || []))
       .then(() => {
         this._debug('Request:', req)
         return axios(req)
         .then(res => {
           queue[requestId] = null
 
-          return demodulate(res, modems.concat(settings.modems || []).concat(datasource.modems || []))
+          return adapting(res, adapters.concat(settings.adapters || []).concat(datasource.adapters || []))
           .then(() => {
             this._debug('Response:', res)
             let data = res.data
@@ -401,12 +397,12 @@ export default class DataManager {
         req.method = req.method || type
         req.data = merge({}, datasource.postData, transaction.data)
 
-        intercept(req, middlewares.concat(settings.middlewares || []).concat(datasource.middlewares || []))
+        intercepting(req, interceptors.concat(settings.interceptors || []).concat(datasource.interceptors || []))
         .then(() => {
           this._debug('Request:', req)
           axios(req)
           .then(res => {
-            demodulate(res, modems.concat(settings.modems || []).concat(datasource.modems || []))
+            adapting(res, adapters.concat(settings.adapters || []).concat(datasource.adapters || []))
             .then(() => {
               this._debug('Response:', res)
               resolve(res)

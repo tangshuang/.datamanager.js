@@ -71,8 +71,8 @@ To new a datamanager instance.
   expires: 10*1000, // 10ms cached
   debug: false, // console.log some internal information, now no use
   requester: fetch, // function(url, options), use which library to send request, you can use axios to create a function, default using `fetch`
-  middlewares: [], // [function(req, next, stop)], functions to modify request options before send
-  modems: [], // [function(res, next, stop)], functions to modify response when request success
+  interceptors: [], // [function(req, next, stop)], functions to modify request options before send
+  adapters: [], // [function(res, next, stop)], functions to modify response when request success
 }
 ```
 
@@ -98,8 +98,8 @@ It is ok if you pass only one datasource here.
   type: '', // string, 'GET' or 'POST', default request method to use. default is 'GET'
   postData: {}, // if your `type` is 'POST' or 'PUT', you may want to bring with some post data when you request, set these default post data here
   transformers: [() => {}], // [function], transform your data before getting data from data manager, you should pass a bound function or an arrow function if you use `this` in it.
-  middlewares: [() => {}], // [function], transform each request before it is sent
-  modems: [], // [function(res, next, stop)], functions to modify response when request success
+  interceptors: [() => {}], // [function], transform each request before it is sent
+  adapters: [], // [function(res, next, stop)], functions to modify response when request success
   expires: 10*1000, // number, ms
   immediate: false, // boolean, data will be requested after being registered immediately, 
     // Notice, this datasource should have no interpolation params, it will use `this.request(id)` to request.
@@ -377,13 +377,13 @@ It means all components will use this options when they initialize.
 
 Notice: if you use `config` after a initailiztion, you will find the previous instances have no change, and the behind instances will use new config.
 
-### use(middleware)
+### intercept(interceptor)
 
-Add a new middleware into global middlewares list, if you want to set a special middleware in your component, use settings.middlewares to set.
-A middleware has the ability to modify request information before request has been sent.
+Add a new interceptor into global interceptors list, if you want to set a special interceptor in your component, use settings.interceptors to set.
+A interceptor has the ability to modify request information before request has been sent.
 It is useful to do authentication.
 
-A middleware is a function like:
+A interceptor is a function like:
 
 ```
 function(req, next, stop) {
@@ -395,11 +395,11 @@ function(req, next, stop) {
 }
 ```
 
-NOTICE: In your middleware, you MUST run `next()` to pass `req` to next middleware, if you do not run `next()`, the request will NEVER be sent. `stop()` will forbide the request be sent out.
+NOTICE: In your interceptor, you MUST run `next()` to pass `req` to next interceptor, if you do not run `next()`, the request will NEVER be sent. `stop()` will forbide the request be sent out.
 
-### adapt(modem)
+### adapt(adapter)
 
-To modify response from server side, you should use `modems`. A modem function should like:
+To modify response from server side, you should use `adapters`. A adapter function should like:
 
 ```
 function(res, next, stop) {
@@ -462,6 +462,8 @@ npm run demo
 
 ## Tips
 
+You can read my idea from [here](http://www.tangshuang.net/3818.html).
+
 1) why we don't provide a `dispatch` method to modify data in datamanager?
 
 Because data is static context, it means data should not be changed. 
@@ -495,19 +497,19 @@ function transform(data) {
 
 So that is it easy to use your own data.
 
-3) middlewares
+3) interceptors
 
-Use middlewares to modify request information before each request is sent. 
-Global mode and single mode are both supported. You can use `use` api to apply a middleware to all requests in your application, or pass a middleware to options.middlewares when you use `.register` method.
+Use interceptors to modify request information before each request is sent. 
+Global mode and single mode are both supported. You can use `use` api to apply a interceptor to all requests in your application, or pass a interceptor to options.interceptors when you use `.register` method.
 
-Now let's talk about a middleware function:
+Now let's talk about a interceptor function:
 
 ```
-function mymiddleware(req, next) {}
+function myinterceptor(req, next) {}
 ```
 
 `req` is the object which contains all information of a request. You can modify everything in it.
-After everything is done, you MUST run `next()` to go into next middleware, or to run the real request.
+After everything is done, you MUST run `next()` to go into next interceptor, or to run the real request.
 If you forget to run next(), your request will never be send. This is very important!
 
 So you can request another datasource before a certain one, like:
@@ -523,13 +525,13 @@ let myfun = (req, next) => {
 }
 this.datamanger.register({
   ...
-  middlewares: [ myfun ],
+  interceptors: [ myfun ],
 })
 ```
 
 Here I use force `get` to get a authData and use it as headers info to send my request.
-Order of middlewares: use(middleware) > constructor(options.middlewares) > .register(options.middlewares).
-Middlewares will not shared amoung different instances.
+Order of interceptors: use(interceptor) > constructor(options.interceptors) > .register(options.interceptors).
+interceptors will not shared amoung different instances.
 
 4) deep cloned data
 
@@ -588,6 +590,57 @@ const ComponentA = (props) => ({
 However, `get` can be used with `subscribe`.
 
 They are in two different idea. So choose what you like or which you can easliy understand.
+
+6) Shared instance
+
+To develop an application, you may want to use a single datamanager instance in your application, so that all modules share one list of datasources. Do like this:
+
+```
+// datamanager.js
+const datamanager = new DataManager()
+datamanager.register([ ... ])
+
+export default datamanager
+```
+
+And in other modules, you can do:
+
+```
+// componentA.js
+import datamanager from './datamanager'
+
+function render() {
+  let user = datamanager.get('user') // here, you do not need to know how datamanager instance implemenet, you just use its api
+  if (user === undefined) {
+    return
+  }
+  console.log(user)
+}
+datamanager.autorun(render)
+```
+
+Or in your application:
+
+```
+// app.js
+import datamanager from './datamanager'
+import ComponentB from './ComponentB'
+
+const B = new ComponentB()
+
+function update() {
+  let data = datamanager.get('list')
+  if (data === undefined) {
+    return
+  }
+  B.update(data)
+}
+
+B.render()
+datamanager.autorun(update)
+```
+
+It is a little like redux's store, you always use only instance in an application.
 
 ## MIT License
 
