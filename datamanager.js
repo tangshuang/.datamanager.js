@@ -3,9 +3,10 @@ import merge from 'lodash.merge'
 import interpolate from 'interpolate'
 import { getObjectHashCode } from 'hashcodeobject'
 import axios from 'axios'
+import HelloStorage from 'hello-storage'
 
 // for cache
-const pool = {}
+const sources = {}
 const queue = {}
 const transactions = {}
 
@@ -17,6 +18,7 @@ const configs = {
   host: '',
   expires: 10, 
   debug: false,
+  storage: 'sessionStorage',
 }
 
 export function config(cfgs = {}) {
@@ -32,21 +34,26 @@ export function adapt(adapter) {
 }
 
 function addDataSource(source) {
-  let { hash, url, type } = source
-  if (pool[hash]) {
+  let { sourceId, url, type, storage } = source
+  if (sources[sourceId]) {
     return
   }
-  pool[hash] = {
+  sources[sourceId] = {
+    sourceId,
     url,
     type,
-    store: {},
+    store: new HelloStorage({
+      storage,
+      expires: 0,
+      namespace: 'datamanager.' + sourceId,
+    }),
     callbacks: [],
   }
 }
 
 function setDataItem(source, requestId, data) {
   let { store } = source
-  let item = store[requestId] = store[requestId] || {}
+  let item = store.get(requestId) || {}
   let snapshots = item.snapshots = item.snapshots || []
   let time = Date.now()
   let dataItem = {
@@ -56,34 +63,7 @@ function setDataItem(source, requestId, data) {
   snapshots.push(dataItem)
   item.time = time
   item.data = data
-}
-
-function trigger(callbacks, ...args) {
-  callbacks.sort((a, b) => {
-    if (a.priority > b.priority) {
-      return -1
-    }
-    else if (a.priority < b.priority) {
-      return 1
-    }
-    else {
-      return 0
-    }
-  })
-  callbacks.forEach(item => {
-    item.callback(...args)
-  })
-}
-
-function transform(data, transformers) {
-  if (!transformers || !transformers.length) {
-    return data
-  }
-  let result = data
-  transformers.forEach(transformer => {
-    result = transformer(result) || result
-  })
-  return result
+  store.set(requestId, item)
 }
 
 function intercepting(req, interceptors) {
@@ -132,18 +112,19 @@ export default class DataManager {
 
     datasources.forEach(datasource => {
       let { id, url, type, postData, transformers, immediate, interceptors, adapters, expires } = datasource
-      let settings = this.settings
-      let { host } = this.settings
+      let { host, storage } = this.settings
       let requestURL = url.indexOf('http://') > -1 || url.indexOf('https://') > -1 ? url : host + url
       let hash = getObjectHashCode({ type, url: requestURL, postData })
       let source = {
-        hash,
+        sourceId: hash,
         url: requestURL,
         type,
         postData,
+        storage,
       }
   
       addDataSource(source)
+      this._debug('Data source added:', source)
       this.datasources[id] = merge({}, source, { transformers, interceptors, adapters, expires })
   
       if (immediate) {
@@ -159,7 +140,7 @@ export default class DataManager {
       throw new Error('Datasource ' + id + ' is not exists.')
     }
 
-    let source = pool[datasource.hash]
+    let source = sources[datasource.sourceId]
     let callbacks = source.callbacks
     callbacks.push({
       context: this.id,
@@ -175,7 +156,7 @@ export default class DataManager {
       throw new Error('Datasource ' + id + ' is not exists.')
     }
 
-    let source = pool[datasource.hash]
+    let source = sources[datasource.sourceId]
     let callbacks = source.callbacks
 
     source.callbacks = callbacks.filter(item => {
@@ -251,14 +232,14 @@ export default class DataManager {
       this._addDep()
     }
 
-    let { url, type, transformers } = datasource
+    let { sourceId, url, type, transformers } = datasource
     let requestURL = interpolate(url, params)
     let requestId = getObjectHashCode({ type, url: requestURL, postData: options.data })
-    let source = pool[datasource.hash]
+    let source = sources[sourceId]
     let settings = this.settings
     
     let transfer = data => {
-      return transform(deepclone(data), transformers)
+      return this.transform(deepclone(data), transformers)
     }
     let request = () => {
       if (queue[requestId]) {
@@ -284,7 +265,7 @@ export default class DataManager {
             setDataItem(source, requestId, data)
             
             let callbacks = source.callbacks
-            trigger(callbacks, data, params, options)
+            this.trigger(callbacks, data, params, options)
             
             return transfer(data)
           })
@@ -303,10 +284,10 @@ export default class DataManager {
     }
     
     let { store } = source
-    let item = store[requestId]
+    let item = store.get(requestId)
     let expires = datasource.expires === undefined ? settings.expires : datasource.expires
 
-    // if there is no data in pool, request data now
+    // if there is no data in sources, request data now
     if (!item) {
       let requester = request()
       if (usePromise) {
@@ -338,7 +319,6 @@ export default class DataManager {
     if (usePromise) {
       return requester
     }
-    // when data is expired, return undefined and request new data again
     return transfer(item.data)
   }
   request(id, params = {}, options = {}, force = false) {
@@ -417,5 +397,31 @@ export default class DataManager {
     })
 
     return transaction.processing
+  }
+  transform(data, transformers) {
+    if (!transformers || !transformers.length) {
+      return data
+    }
+    let result = data
+    transformers.forEach(transformer => {
+      result = transformer(result) || result
+    })
+    return result
+  }
+  trigger(callbacks, ...args) {
+    callbacks.sort((a, b) => {
+      if (a.priority > b.priority) {
+        return -1
+      }
+      else if (a.priority < b.priority) {
+        return 1
+      }
+      else {
+        return 0
+      }
+    })
+    callbacks.forEach(item => {
+      item.callback(...args)
+    })
   }
 }

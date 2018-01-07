@@ -73,6 +73,7 @@ To new a datamanager instance.
   requester: fetch, // function(url, options), use which library to send request, you can use axios to create a function, default using `fetch`
   interceptors: [], // [function(req, next, stop)], functions to modify request options before send
   adapters: [], // [function(res, next, stop)], functions to modify response when request success
+  storage: 'sessionStorage', // which storage driver to use, default 'sessionStorage', options: localStorage, sessionStorage, object
 }
 ```
 
@@ -370,12 +371,13 @@ Current default configs is:
   host: '',
   expires: 10*1000, 
   debug: false,
+  storage: 'sessionStorage', // which storage driver to use, default 'sessionStorage', options: localStorage, sessionStorage, object
 }
 ```
 
 It means all components will use this options when they initialize.
 
-Notice: if you use `config` after a initailiztion, you will find the previous instances have no change, and the behind instances will use new config.
+Notice: if you use `config` after a initailiztion, you will find the previous instances have no change, and the behind instances will use new config. However, it is recommended to use `config()` before all using.
 
 ### intercept(interceptor)
 

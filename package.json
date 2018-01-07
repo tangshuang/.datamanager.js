@@ -1,6 +1,6 @@
 {
   "name": "datamanager.js",
-  "version": "0.2.2",
+  "version": "0.3.0",
   "description": "A frontend data sources management resolution among different components/application.",
   "main": "dist/datamanager.js",
   "scripts": {
@@ -25,6 +25,7 @@
   "dependencies": {
     "axios": "^0.17.1",
     "hashcodeobject": "0.0.1",
+    "hello-storage": "0.0.1",
     "interpolate": "^0.1.0",
     "lodash.clonedeep": "^4.5.0",
     "lodash.merge": "^4.6.0"
