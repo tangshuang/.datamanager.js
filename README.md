@@ -67,13 +67,15 @@ To new a datamanager instance.
 
 ```
 {
+  id: '', // string, to name this datamanager instance
   host: '', // string, i.e. https://yourdomain.com/api, which will be connected with your given url in component
   expires: 10*1000, // 10ms cached
   debug: false, // console.log some internal information, now no use
   requester: fetch, // function(url, options), use which library to send request, you can use axios to create a function, default using `fetch`
   interceptors: [], // [function(req, next, stop)], functions to modify request options before send
   adapters: [], // [function(res, next, stop)], functions to modify response when request success
-  storage: 'sessionStorage', // which storage driver to use, default 'sessionStorage', options: localStorage, sessionStorage, object
+  storage: sessionStorage, // which storage driver to use, default sessionStorage, options: localStorage, sessionStorage, object
+  snapshots: false, // whether to generate snapshot when data is updated, if true, you can find snapshots with Chrome dev-tools
 }
 ```
 
@@ -414,6 +416,11 @@ function(res, next, stop) {
 
 This is a easy for you to check the response is what you expect.
 
+### clean()
+
+Clean all cached data.
+Only be used when a user is logging out.
+
 ## Shared datasource
 
 When using register, you should give `type` `url` options, `body` may be given. We can identify a datasource with type+url+body. If two component register datasources with same type+url+body, we treat they are the same datasource, their data are shared, and when one component get data which fire requesting, the other one will be notified after data back.
@@ -459,7 +466,8 @@ datamanager will help you to merge these requests, only once request happens.
 Run a demo on your local machine:
 
 ```
-npm run demo
+npm install
+npm start
 ```
 
 ## Tips

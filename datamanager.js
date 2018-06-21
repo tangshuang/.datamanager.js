@@ -18,7 +18,7 @@ const configs = {
   host: '',
   expires: 10, 
   debug: false,
-  storage: 'sessionStorage',
+  storage: sessionStorage,
 }
 
 export function config(cfgs = {}) {
@@ -33,6 +33,15 @@ export function adapt(adapter) {
   adapters.push(adapter)
 }
 
+export function clean() {
+  let datasourceIds = Object.keys(sources)
+  datasourceIds.forEach(id => {
+    let source = sources[id]
+    let { store } = source
+    store.clean()
+  })
+}
+
 function addDataSource(source) {
   let { sourceId, url, type, storage } = source
   if (sources[sourceId]) {
@@ -45,22 +54,24 @@ function addDataSource(source) {
     store: new HelloStorage({
       storage,
       expires: 0,
-      namespace: 'datamanager.' + sourceId,
+      namespace: '__DM__.' + sourceId,
     }),
     callbacks: [],
   }
 }
 
-function setDataItem(source, requestId, data) {
+function setDataItem(source, requestId, data, willUseSnapshots = false) {
   let { store } = source
   let item = store.get(requestId) || {}
-  let snapshots = item.snapshots = item.snapshots || []
   let time = Date.now()
   let dataItem = {
     time,
     data,
   }
-  snapshots.push(dataItem)
+  if (willUseSnapshots) {
+    let snapshots = item.snapshots = item.snapshots || []
+    snapshots.push(dataItem)
+  }
   item.time = time
   item.data = data
   store.set(requestId, item)
@@ -93,14 +104,42 @@ function isEqual(obj1, obj2) {
   return obj1 === obj2
 }
 
+function transform(data, transformers) {
+  if (!transformers || !transformers.length) {
+    return data
+  }
+  let result = data
+  transformers.forEach(transformer => {
+    result = transformer(result) || result
+  })
+  return result
+}
+
+function trigger(callbacks, ...args) {
+  callbacks.sort((a, b) => {
+    if (a.priority > b.priority) {
+      return -1
+    }
+    else if (a.priority < b.priority) {
+      return 1
+    }
+    else {
+      return 0
+    }
+  })
+  callbacks.forEach(item => {
+    item.callback(...args)
+  })
+}
+
 export default class DataManager {
   constructor(settings = {}) {
     this.datasources = {}
-    this.id = settings.id || 'datamanager.' + Date.now() + '.' + parseInt(Math.random() * 10000)
+    this.id = (settings.id || 'datamanager.' + Date.now()) + '.' + parseInt(Math.random() * 10000)
     this.settings = merge({}, configs, settings)
     this._deps = []
   }
-  _debug(...args) {
+  debug(...args) {
     if (this.settings.debug) {
       console.log(this.id, ...args)
     }
@@ -124,7 +163,7 @@ export default class DataManager {
       }
   
       addDataSource(source)
-      this._debug('Data source added:', source)
+      this.debug('Data source added:', source)
       this.datasources[id] = merge({}, source, { transformers, interceptors, adapters, expires })
   
       if (immediate) {
@@ -237,9 +276,10 @@ export default class DataManager {
     let requestId = getObjectHashCode({ type, url: requestURL, postData: options.data })
     let source = sources[sourceId]
     let settings = this.settings
+
     
     let transfer = data => {
-      return this.transform(deepclone(data), transformers)
+      return transform(deepclone(data), transformers)
     }
     let request = () => {
       if (queue[requestId]) {
@@ -250,22 +290,23 @@ export default class DataManager {
       req.url = requestURL
       req.method = req.method || type.toUpperCase()
       req.data = merge({}, datasource.postData, req.data)
-
+      
       let requester = intercepting(req, interceptors.concat(settings.interceptors || []).concat(datasource.interceptors || []))
       .then(() => {
-        this._debug('Request:', req)
+        this.debug('RequestId:', requestId)
+        this.debug('Request:', req)
         return axios(req)
         .then(res => {
           queue[requestId] = null
 
           return adapting(res, adapters.concat(settings.adapters || []).concat(datasource.adapters || []))
           .then(() => {
-            this._debug('Response:', res)
+            this.debug('Response:', res)
             let data = res.data
-            setDataItem(source, requestId, data)
+            setDataItem(source, requestId, data, settings.snapshots)
             
             let callbacks = source.callbacks
-            this.trigger(callbacks, data, params, options)
+            trigger(callbacks, data, params, options)
             
             return transfer(data)
           })
@@ -379,12 +420,12 @@ export default class DataManager {
 
         intercepting(req, interceptors.concat(settings.interceptors || []).concat(datasource.interceptors || []))
         .then(() => {
-          this._debug('Request:', req)
+          this.debug('Request:', req)
           axios(req)
           .then(res => {
             adapting(res, adapters.concat(settings.adapters || []).concat(datasource.adapters || []))
             .then(() => {
-              this._debug('Response:', res)
+              this.debug('Response:', res)
               resolve(res)
             })
             .catch(reject)
@@ -397,31 +438,5 @@ export default class DataManager {
     })
 
     return transaction.processing
-  }
-  transform(data, transformers) {
-    if (!transformers || !transformers.length) {
-      return data
-    }
-    let result = data
-    transformers.forEach(transformer => {
-      result = transformer(result) || result
-    })
-    return result
-  }
-  trigger(callbacks, ...args) {
-    callbacks.sort((a, b) => {
-      if (a.priority > b.priority) {
-        return -1
-      }
-      else if (a.priority < b.priority) {
-        return 1
-      }
-      else {
-        return 0
-      }
-    })
-    callbacks.forEach(item => {
-      item.callback(...args)
-    })
   }
 }

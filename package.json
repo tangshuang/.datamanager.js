@@ -1,11 +1,11 @@
 {
   "name": "datamanager.js",
-  "version": "0.3.0",
+  "version": "1.0.0",
   "description": "A frontend data sources management resolution among different components/application.",
   "main": "dist/datamanager.js",
   "scripts": {
     "prepublishOnly": "npm run build",
-    "demo": "nodemon ./examples/server.js --watch ./examples/server.js",
+    "start": "nodemon ./examples/server.js --watch ./examples/server.js",
     "build": "webpack"
   },
   "repository": {
@@ -25,7 +25,7 @@
   "dependencies": {
     "axios": "^0.17.1",
     "hashcodeobject": "0.0.1",
-    "hello-storage": "0.0.1",
+    "hello-storage": "^1.1.0",
     "interpolate": "^0.1.0",
     "lodash.clonedeep": "^4.5.0",
     "lodash.merge": "^4.6.0"
