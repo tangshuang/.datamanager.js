@@ -60,7 +60,7 @@ function addDataSource(source) {
   }
 }
 
-function setDataItem(source, requestId, data, willUseSnapshots = false) {
+function setDataItem(source, requestId, data, sanpshotsMaxCount = 0) {
   let { store } = source
   let item = store.get(requestId) || {}
   let time = Date.now()
@@ -68,9 +68,12 @@ function setDataItem(source, requestId, data, willUseSnapshots = false) {
     time,
     data,
   }
-  if (willUseSnapshots) {
+  if (sanpshotsMaxCount) {
     let snapshots = item.snapshots = item.snapshots || []
-    snapshots.push(dataItem)
+    snapshots.unshift(dataItem)
+    if (snapshots.length > sanpshotsMaxCount) {
+      snapshots.length = sanpshotsMaxCount
+    }
   }
   item.time = time
   item.data = data

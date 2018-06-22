@@ -75,7 +75,7 @@ To new a datamanager instance.
   interceptors: [], // [function(req, next, stop)], functions to modify request options before send
   adapters: [], // [function(res, next, stop)], functions to modify response when request success
   storage: sessionStorage, // which storage driver to use, default sessionStorage, options: localStorage, sessionStorage, object
-  snapshots: false, // whether to generate snapshot when data is updated, if true, you can find snapshots with Chrome dev-tools
+  snapshots: 0, // number, count of snapshot, you can find snapshots with Chrome dev-tools
 }
 ```
 

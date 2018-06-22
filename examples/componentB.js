@@ -3,7 +3,7 @@ import DataManager from '../datamanager'
 export default class ComponentA {
   constructor(container, DataSources) {
     this.container = container
-    this.data = new DataManager({ id: 'B', debug: true, expires: 1000 })
+    this.data = new DataManager({ id: 'B', debug: true, expires: 1000, snapshots: 10 })
     this.data.register(Object.assign({ id: 'studentsB' }, DataSources.STUDENTS))
     this.data.autorun(this.render.bind(this))
   }
